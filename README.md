@@ -1,167 +1,183 @@
 # RNS Bulk Manager
 
-A powerful dApp for managing Rootstock Name Service (RNS) domains with bulk operations. This tool enables users to register, renew, and update records for multiple RNS domains in a single transaction, providing the "Namecheap" or "GoDaddy" bulk management experience that the RNS ecosystem currently lacks.
+**Manage all your Rootstock domains from one place. Register, renew, and update in bulk to save on gas fees.**
 
-## 🚀 Features
+[🌐 Live App](https://power-user-mu.vercel.app/) | [📄 Smart Contract](https://explorer.testnet.rootstock.io/address/0xdb34e8611333fd6dd3a57c59f125eba8878378cd) | [🔧 GitHub](https://github.com/Abidoyesimze/power-user)
 
-- **Bulk Registration**: Register multiple RNS domains in a single transaction
-- **Bulk Renewal**: Renew multiple domains simultaneously (by name or tokenId)
-- **Bulk Address Updates**: Update addresses for multiple domains at once
-- **Bulk Resolver Updates**: Set resolvers across multiple domains
-- **Multi-chain Address Support**: Manage addresses for different chains (Bitcoin, Ethereum, etc.)
-- **Ownership Verification**: Batch check domain ownership before operations
-- **Generic Multicall**: Combine multiple operations in one transaction
-- **Partial Failure Handling**: Failed operations don't revert successful ones
+---
 
-## 📋 Repository
+## What is This?
 
-**GitHub**: https://github.com/Abidoyesimze/power-user
+RNS Bulk Manager is your one-stop dashboard for managing Rootstock Name Service (RNS) domains. Instead of handling each domain separately, you can register, renew, and update multiple domains at once in a single transaction. This saves you tons of gas fees and time.
 
-## 🏗️ Project Structure
+Think of it like managing multiple websites at once instead of doing them one by one.
 
-```
-BulkManager/
-├── smartcontract/
-│   ├── contracts/
-│   │   ├── RNSBulkManager.sol       # Main bulk manager contract
-│   │   ├── interfaces/              # RNS interface definitions
-│   │   └── mocks/                   # Mock contracts for testing
-│   ├── test/
-│   │   └── RNSBulkManager.test.ts  # Comprehensive test suite
-│   ├── scripts/
-│   │   └── deploy-rns-bulk-manager.ts
-│   ├── hardhat.config.ts            # RSK network configuration
-│   └── package.json
-└── README.md
-```
+## Why Use It?
 
-## 🧪 Test Results
+### 💰 Save Money
+Every transaction on the blockchain costs gas fees. When you manage 10 domains individually, you pay the gas fee 10 times. But with bulk operations, you pay just once for all 10 domains. That's where the savings come from - up to 90% less in gas fees.
 
-```
-8/8 tests passing
+### ⏱️ Save Time
+What takes hours of clicking through transactions can now be done in minutes. Select your domains, choose your action, and execute. Simple as that.
 
-✅ Setup Tests
-✅ Token Distribution  
-✅ Cost Calculations
-✅ Ownership Verification
-✅ Edge Cases
-```
+### 🎯 Stay Organized
+Never lose track of your domains again. See all your registered domains in one place, know when they expire, and get alerts when it's time to renew.
 
-## 🔧 Setup & Installation
+### 🔒 Stay Safe
+The smart contract is open source and deployed on Rootstock. Every operation is checked before it runs, and you maintain full control with your own wallet.
 
-### Prerequisites
+## What Can You Do?
 
-- Node.js (v18+)
-- npm or yarn
-- Hardhat
+### Register Multiple Domains
+Want to secure your brand across different domain names? Register them all at once. The app checks if they're available before you submit, so you won't waste money on unavailable names.
 
-### Install Dependencies
+- Real-time availability checking as you type
+- Visual feedback showing which domains are free or taken
+- Choose registration period (1, 2, or 5 years)
+- All domains registered in one transaction
 
-```bash
-cd smartcontract
-npm install
-```
+### Renew Your Domains
+Got domains expiring soon? Renew them in bulk. Pick how many years you want to extend, select your domains, and renew them all together.
 
-### Compile Contracts
+- See expiration dates at a glance
+- Color-coded warnings (red for expired, yellow for expiring soon)
+- Choose renewal period (1-5 years)
+- Renew dozens at once
 
-```bash
-npm run compile
-```
+### Update Domain Settings
+Changed your wallet address? Need to point domains to a new resolver? Update all your domains' addresses and resolvers simultaneously.
 
-### Run Tests
+- Update addresses in bulk
+- Change resolvers for multiple domains
+- Ownership verified automatically
+- All updates in one transaction
 
-```bash
-npm test
-```
+### Search Domain Availability
+Planning to register a domain? Check if it's available first. Type in any name and instantly see if it's taken or free to register.
 
-## 📝 RNS Contract Addresses
+- Instant availability results
+- See who owns taken domains
+- ENS-like search experience
+- Visual status indicators
 
-### RSK Testnet
-- **RNS Registry**: `0x7d284aaac6e925aad802a53c0c69efe3764597b8`
-- **RSK Owner**: `0xca0a477e19bac7e0e172ccfd2e3c28a7200bdb71`
-- **FIFS Registrar**: `0x90734bd6bf96250a7b262e2bc34284b0d47c1e8d`
-- **RIF Token**: `0x19f64674d8a5b4e652319f5e239efd3bc969a1fe`
-- **Renewer**: `0xe48ad1d5fbf61394b5a7d81ab2f36736a046657b`
+## How It Works
 
-### RSK Mainnet
-- **RNS Registry**: `0xcb868aeabd31e2b66f74e9a55cf064abb31a4ad5`
-- **RSK Owner**: `0x45d3e4fb311982a06ba52359d44cb4f5980e0ef1`
-- **FIFS Registrar**: `0xd9c79ced86ecf49f5e4a973594634c83197c35ab`
-- **RIF Token**: `0x2acc95758f8b5f583470ba265eb685a8f45fc9d5`
+**Step 1: Connect Your Wallet**
+Open the app and connect your Rootstock wallet. This is the only permission needed - everything else is controlled by you.
 
-## 🚢 Deployment
+**Step 2: Choose Your Action**
+Navigate to the feature you need:
+- **Register**: Create new domains
+- **Renew**: Extend existing domains
+- **Update**: Modify domain settings
 
-### Deploy to RSK Testnet
+**Step 3: Select Domains**
+For bulk operations, pick which domains you want to manage. For new registrations, type the domain names you want.
 
-1. Set up your `.env` file with your private key
-2. Get testnet RBTC from the faucet: https://faucet.rsk.co/
-3. Deploy:
+**Step 4: Execute**
+Confirm the transaction in your wallet. All selected operations happen together, and you pay gas fees only once.
 
-```bash
-npm run deploy:testnet
-```
+**Step 5: Done**
+Your domains update instantly. No waiting, no checking - it's all automatic.
 
-### Deploy to RSK Mainnet
+## Who Is This For?
 
-```bash
-npm run deploy:mainnet
-```
+### Individual Users
+Own multiple personal domains? Manage them efficiently without paying through the nose in gas fees.
 
-## 📖 Usage Example
+### Projects & Brands
+Launching a project or building a brand? Register all your related domains at once to secure your identity.
 
-```typescript
-import { getContract } from "viem";
-import { publicClient } from "./client";
+### Developers
+Building on Rootstock and need domain management tools? Use the open-source code as a foundation for your own tools.
 
-const bulkManager = getContract({
-  address: "0x...", // Your deployment address
-  abi: RNSBulkManagerABI,
-  publicClient,
-});
+### DAOs and Organizations
+Running a decentralized organization with many domains? Centralize domain management and reduce operational costs.
 
-// Bulk register domains
-await bulkManager.write.bulkRegister([{
-  name: "domain1.rsk",
-  owner: "0x...",
-  secret: "0x...",
-  duration: 365 * 24 * 60 * 60
-}]);
+## Getting Started
 
-// Bulk renew domains
-await bulkManager.write.bulkRenew([{
-  name: "domain1.rsk",
-  duration: 365 * 24 * 60 * 60
-}]);
+**Quick Start:**
+1. Visit [the live app](https://power-user-mu.vercel.app/)
+2. Connect your Rootstock wallet
+3. Navigate to your desired feature
+4. Start managing domains in bulk
 
-// Update addresses
-await bulkManager.write.bulkSetAddress([{
-  node: "0x...",
-  targetAddress: "0x..."
-}]);
-```
+**For Developers:**
+The entire project is open source. Check out the GitHub repository to see the code, contribute improvements, or fork it for your own use.
 
-## 🛠️ Development
+**Smart Contract Address (Testnet):**
+`0xdb34e8611333fd6dd3a57c59f125eba8878378cd`
 
-### Project Status
+View it on the [Rootstock Explorer](https://explorer.testnet.rootstock.io/address/0xdb34e8611333fd6dd3a57c59f125eba8878378cd).
 
-✅ Smart contract completed
-✅ Comprehensive test suite (8/8 passing)
-✅ Mock contracts for testing
-✅ Rootstock network configuration
-⏳ Frontend (Next step)
-⏳ Testnet deployment
-⏳ Production deployment
+## Understanding the Savings
 
-## 📄 License
+Let's say you want to register 10 domains individually:
+- 10 separate transactions
+- Each transaction costs gas fees
+- Total cost: 10 × gas fees
 
-MIT
+With RNS Bulk Manager:
+- 1 transaction for all 10 domains
+- Same operations, single gas fee
+- Total cost: 1 × gas fees
 
-## 🤝 Contributing
+The more domains you manage, the more you save. Simple math, big savings.
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+## Built on Rootstock
 
-## 📧 Contact
+RNS Bulk Manager is built specifically for the Rootstock Name Service ecosystem. Rootstock is the most secure smart contract platform in the world, and now managing your identities on it is more accessible than ever.
 
-- **GitHub**: https://github.com/Abidoyesimze/power-user
-- **Project**: RNS Bulk Manager for Rootstock
+Whether you're a casual user securing a few domains or an organization managing hundreds, this tool makes it efficient and affordable.
 
+## Safety & Security
+
+- **Open Source**: Every line of code is public. Review it yourself on GitHub.
+- **Smart Contract**: Deployed and verified on Rootstock Testnet. You can inspect every function.
+- **Non-Custodial**: We never hold your domains or wallet keys. Everything stays with you.
+- **Verified Operations**: The contract checks ownership before any operation.
+- **Error Prevention**: Pre-validation prevents failed transactions before you pay gas.
+
+## Current Features
+
+✅ Bulk domain registration  
+✅ Bulk domain renewal with flexible periods  
+✅ Bulk address updates  
+✅ Bulk resolver updates  
+✅ Real-time availability checking  
+✅ Expiration tracking and alerts  
+✅ Professional dashboard interface  
+✅ Auto-refresh after transactions  
+✅ Toast notifications for all operations  
+✅ Search functionality  
+
+## What's Next?
+
+Future enhancements we're considering:
+- Domain transfer functionality
+- Advanced analytics dashboard
+- Batch import from other services
+- Gas price optimization
+- Multi-signature support for organizations
+
+Got ideas? Contributions welcome! This is a community project.
+
+## Live Demo
+
+**Try it now:** [power-user-mu.vercel.app](https://power-user-mu.vercel.app/)
+
+Connect your wallet and start managing domains. No signup, no registration, just connect and go.
+
+## Questions?
+
+- **How do I get started?** Visit the live app and connect your wallet
+- **How much does it cost?** It's free to use, you only pay blockchain gas fees (which are minimized through bulk operations)
+- **Is it safe?** Yes - open source smart contract on Rootstock, you keep your keys
+- **Can I see the code?** Absolutely, everything is on GitHub
+- **What if I have issues?** Check GitHub issues or reach out to the community
+
+---
+
+**Built for Rootstock • Open Source • Self-Hosted**
+
+Make RNS domain management accessible to everyone.

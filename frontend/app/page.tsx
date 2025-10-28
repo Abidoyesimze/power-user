@@ -1,20 +1,23 @@
 "use client";
 
 import WalletConnect from "./components/WalletConnect";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
+  const router = useRouter();
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-950 to-black">
       {/* Navigation */}
       <nav className="sticky top-0 z-50 backdrop-blur-lg bg-gray-950/80 border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20">
-            <div className="flex items-center gap-3">
+            <Link href="/" className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-blue-600 flex items-center justify-center">
                 <span className="text-white font-bold text-lg">RNS</span>
               </div>
               <span className="text-xl font-bold text-white">RNS Bulk Manager</span>
-            </div>
+            </Link>
             <WalletConnect />
           </div>
         </div>
@@ -34,10 +37,16 @@ export default function Home() {
               <span className="text-gray-500">Save up to 80% on gas fees while managing hundreds of domains.</span>
             </p>
             <div className="flex items-center justify-center gap-4">
-              <button className="px-8 py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-blue-700 transition-all duration-200 shadow-lg shadow-purple-500/20 hover:shadow-purple-500/40">
+              <button 
+                onClick={() => router.push('/manage')}
+                className="px-8 py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-blue-700 transition-all duration-200 shadow-lg shadow-purple-500/20 hover:shadow-purple-500/40"
+              >
                 Get Started
               </button>
-              <button className="px-8 py-4 bg-gray-800 text-white font-semibold rounded-xl hover:bg-gray-700 transition-all duration-200 border border-gray-700">
+              <button 
+                onClick={() => window.open('https://docs.rsksmart.com/docs/storage/rns/', '_blank')}
+                className="px-8 py-4 bg-gray-800 text-white font-semibold rounded-xl hover:bg-gray-700 transition-all duration-200 border border-gray-700"
+              >
                 View Documentation
               </button>
             </div>
@@ -157,9 +166,24 @@ export default function Home() {
               Built for Rootstock Name Service • Open source • Self-hosted
             </p>
             <div className="mt-6 flex items-center justify-center gap-6 text-sm">
-              <a href="#" className="text-gray-400 hover:text-white transition">Documentation</a>
-              <a href="#" className="text-gray-400 hover:text-white transition">GitHub</a>
-              <a href="#" className="text-gray-400 hover:text-white transition">Audit</a>
+              <button 
+                onClick={() => window.open('https://docs.rsksmart.com/docs/storage/rns/', '_blank')}
+                className="text-gray-400 hover:text-white transition"
+              >
+                Documentation
+              </button>
+              <button 
+                onClick={() => window.open('https://github.com/rsksmart/rns-bulk-manager', '_blank')}
+                className="text-gray-400 hover:text-white transition"
+              >
+                GitHub
+              </button>
+              <button 
+                onClick={() => router.push('/manage')}
+                className="text-gray-400 hover:text-white transition"
+              >
+                Manage Domains
+              </button>
             </div>
           </div>
         </div>

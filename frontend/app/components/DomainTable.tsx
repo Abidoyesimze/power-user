@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface Domain {
   id: string;
@@ -30,11 +30,19 @@ const mockDomains: Domain[] = [
   },
 ];
 
-export default function DomainTable() {
+interface DomainTableProps {
+  onSelectionChange?: (selectedCount: number) => void;
+}
+
+export default function DomainTable({ onSelectionChange }: DomainTableProps) {
   const [domains, setDomains] = useState(mockDomains);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<keyof Domain>("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
+  useEffect(() => {
+    onSelectionChange?.(selectedIds.size);
+  }, []); // Only on mount to notify parent of initial state
 
   const toggleSelect = (id: string) => {
     const newSelected = new Set(selectedIds);
@@ -44,13 +52,17 @@ export default function DomainTable() {
       newSelected.add(id);
     }
     setSelectedIds(newSelected);
+    onSelectionChange?.(newSelected.size);
   };
 
   const toggleSelectAll = () => {
     if (selectedIds.size === domains.length) {
       setSelectedIds(new Set());
+      onSelectionChange?.(0);
     } else {
-      setSelectedIds(new Set(domains.map((d) => d.id)));
+      const allSelected = new Set(domains.map((d) => d.id));
+      setSelectedIds(allSelected);
+      onSelectionChange?.(allSelected.size);
     }
   };
 

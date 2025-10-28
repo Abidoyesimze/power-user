@@ -5,7 +5,9 @@ import { getDefaultConfig, RainbowKitProvider, darkTheme } from "@rainbow-me/rai
 import { WagmiProvider } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { defineChain } from "viem";
+import { ToastContainer } from "react-toastify";
 import "@rainbow-me/rainbowkit/styles.css";
+import "react-toastify/dist/ReactToastify.css";
 
 // Define Rootstock Testnet chain
 const rskTestnet = defineChain({
@@ -30,15 +32,14 @@ const rskTestnet = defineChain({
   testnet: true,
 });
 
-const chains = [rskTestnet];
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "demo";
 
 const config = getDefaultConfig({
   appName: "RNS Bulk Manager",
   projectId,
-  chains,
+  chains: [rskTestnet],
   ssr: true,
-});
+} as any);
 
 const queryClient = new QueryClient();
 
@@ -46,7 +47,19 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider theme={darkTheme()}>{children}</RainbowKitProvider>
+        <RainbowKitProvider theme={darkTheme()}>
+          {children}
+          <ToastContainer
+            position="top-right"
+            autoClose={5000}
+            hideProgressBar={false}
+            newestOnTop={true}
+            closeOnClick
+            pauseOnFocusLoss
+            draggable
+            pauseOnHover
+          />
+        </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
   );

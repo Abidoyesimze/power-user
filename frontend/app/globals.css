@@ -32,3 +32,35 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #666;
 }
+
+/* Toast Notification Styles */
+.Toastify__toast-container {
+  z-index: 10000 !important;
+}
+
+.Toastify__toast {
+  background-color: #1a1a1a !important;
+  color: #ededed !important;
+  border: 1px solid #3a3a3a !important;
+  border-radius: 0.5rem !important;
+}
+
+.Toastify__toast--success {
+  border-left: 4px solid #10b981 !important;
+}
+
+.Toastify__toast--error {
+  border-left: 4px solid #ef4444 !important;
+}
+
+.Toastify__toast--info {
+  border-left: 4px solid #3b82f6 !important;
+}
+
+.Toastify__toast--warning {
+  border-left: 4px solid #f59e0b !important;
+}
+
+.Toastify__progress-bar {
+  background: linear-gradient(90deg, #8b5cf6, #3b82f6) !important;
+}

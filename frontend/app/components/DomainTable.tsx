@@ -6,43 +6,38 @@ interface Domain {
   id: string;
   name: string;
   owner: string;
-  expiry: string;
+  expiry: Date | null;
   resolver: string;
   address: string;
+  isExpired?: boolean;
+  daysUntilExpiry?: number;
 }
-
-const mockDomains: Domain[] = [
-  {
-    id: "1",
-    name: "alice.rsk",
-    owner: "0x1234...5678",
-    expiry: "2025-12-31",
-    resolver: "0xabcd...efgh",
-    address: "0x9876...5432",
-  },
-  {
-    id: "2",
-    name: "bob.rsk",
-    owner: "0x1234...5678",
-    expiry: "2025-11-15",
-    resolver: "0xabcd...efgh",
-    address: "0x9876...5432",
-  },
-];
 
 interface DomainTableProps {
+  domains?: Domain[];
   onSelectionChange?: (selectedCount: number) => void;
+  onSelectedDomainsChange?: (selectedDomains: Domain[]) => void;
 }
 
-export default function DomainTable({ onSelectionChange }: DomainTableProps) {
-  const [domains, setDomains] = useState(mockDomains);
+export default function DomainTable({ 
+  domains: externalDomains = [],
+  onSelectionChange,
+  onSelectedDomainsChange 
+}: DomainTableProps) {
+  const [domains, setDomains] = useState<Domain[]>(externalDomains);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<keyof Domain>("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   useEffect(() => {
+    setDomains(externalDomains);
+  }, [externalDomains]);
+
+  useEffect(() => {
     onSelectionChange?.(selectedIds.size);
-  }, []); // Only on mount to notify parent of initial state
+    const selectedDomains = domains.filter(d => selectedIds.has(d.id));
+    onSelectedDomainsChange?.(selectedDomains);
+  }, [selectedIds, domains, onSelectionChange, onSelectedDomainsChange]);
 
   const toggleSelect = (id: string) => {
     const newSelected = new Set(selectedIds);
@@ -78,10 +73,51 @@ export default function DomainTable({ onSelectionChange }: DomainTableProps) {
   const sortedDomains = [...domains].sort((a, b) => {
     const aVal = a[sortBy];
     const bVal = b[sortBy];
+    
+    // Handle null/undefined values
+    if (aVal == null && bVal == null) return 0;
+    if (aVal == null) return sortOrder === "asc" ? 1 : -1;
+    if (bVal == null) return sortOrder === "asc" ? -1 : 1;
+    
     if (aVal < bVal) return sortOrder === "asc" ? -1 : 1;
     if (aVal > bVal) return sortOrder === "asc" ? 1 : -1;
     return 0;
   });
+
+  const formatExpiry = (domain: Domain): string => {
+    if (!domain.expiry) return "N/A";
+    
+    if (domain.isExpired) {
+      return `Expired`;
+    }
+    
+    if (domain.daysUntilExpiry !== undefined) {
+      if (domain.daysUntilExpiry < 0) return `Expired`;
+      if (domain.daysUntilExpiry < 30) return `${domain.daysUntilExpiry} days`;
+      return domain.expiry.toLocaleDateString();
+    }
+    
+    return domain.expiry.toLocaleDateString();
+  };
+
+  const getExpiryBadge = (domain: Domain) => {
+    if (!domain.expiry) return null;
+    
+    if (domain.isExpired) {
+      return <span className="px-2 py-1 text-xs font-semibold bg-red-900/30 text-red-400 border border-red-500/50 rounded">Expired</span>;
+    }
+    
+    if (domain.daysUntilExpiry !== undefined) {
+      if (domain.daysUntilExpiry < 30) {
+        return <span className="px-2 py-1 text-xs font-semibold bg-yellow-900/30 text-yellow-400 border border-yellow-500/50 rounded">{domain.daysUntilExpiry} days</span>;
+      }
+      if (domain.daysUntilExpiry < 90) {
+        return <span className="px-2 py-1 text-xs font-semibold bg-blue-900/30 text-blue-400 border border-blue-500/50 rounded">{domain.daysUntilExpiry} days</span>;
+      }
+    }
+    
+    return null;
+  };
 
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
@@ -129,38 +165,57 @@ export default function DomainTable({ onSelectionChange }: DomainTableProps) {
             </tr>
           </thead>
           <tbody className="bg-gray-800 divide-y divide-gray-700">
-            {sortedDomains.map((domain) => (
-              <tr
-                key={domain.id}
-                className={`hover:bg-gray-750 ${
-                  selectedIds.has(domain.id) ? "bg-blue-900/20" : ""
-                }`}
-              >
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(domain.id)}
-                    onChange={() => toggleSelect(domain.id)}
-                    className="rounded border-gray-600 bg-gray-800 text-blue-600 focus:ring-blue-500"
-                  />
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
-                  {domain.name}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400 font-mono">
-                  {domain.owner}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                  {domain.expiry}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400 font-mono">
-                  {domain.resolver}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400 font-mono">
-                  {domain.address}
+            {sortedDomains.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-6 py-12 text-center">
+                  <div className="flex flex-col items-center justify-center">
+                    <span className="text-6xl mb-4">📭</span>
+                    <p className="text-gray-400 text-lg mb-2">No domains found</p>
+                    <p className="text-gray-500 text-sm">
+                      Your registered domains will appear here
+                    </p>
+                  </div>
                 </td>
               </tr>
-            ))}
+            ) : (
+              sortedDomains.map((domain) => (
+                <tr
+                  key={domain.id}
+                  className={`hover:bg-gray-750 ${
+                    selectedIds.has(domain.id) ? "bg-blue-900/20" : ""
+                  }`}
+                >
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(domain.id)}
+                      onChange={() => toggleSelect(domain.id)}
+                      className="rounded border-gray-600 bg-gray-800 text-blue-600 focus:ring-blue-500"
+                    />
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
+                    {domain.name}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400 font-mono">
+                    {domain.owner}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className={domain.isExpired ? "text-red-400" : domain.daysUntilExpiry !== undefined && domain.daysUntilExpiry < 30 ? "text-yellow-400" : "text-gray-400"}>
+                        {formatExpiry(domain)}
+                      </span>
+                      {getExpiryBadge(domain)}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400 font-mono">
+                    {domain.resolver}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400 font-mono">
+                    {domain.address}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

@@ -1,6 +1,9 @@
 import type { HardhatUserConfig } from "hardhat/config";
+import dotenv from "dotenv";
 
 import hardhatToolboxViemPlugin from "@nomicfoundation/hardhat-toolbox-viem";
+
+dotenv.config();
 
 const config: HardhatUserConfig = {
   plugins: [hardhatToolboxViemPlugin],
@@ -25,7 +28,7 @@ const config: HardhatUserConfig = {
     rskTestnet: {
       type: "http",
       chainId: 31,
-      url: "https://public-node.testnet.rsk.co",
+      url: process.env.ROOTSTOCK_TESTNET_RPC_URL || "https://public-node.testnet.rsk.co",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       timeout: 60000,
     },

@@ -5,7 +5,11 @@
 **Networks**: RSK Testnet and Mainnet configured  
 **Test Status**: ✅ 8/8 tests passing  
 **Compilation**: ✅ Successful  
-**Issue**: RSK Testnet public node is currently unreachable
+**Deployment**: ✅ Successfully deployed to RSK Testnet
+
+**Contract Address**: `0xdb34e8611333fd6dd3a57c59f125eba8878378cd`  
+**Network**: RSK Testnet (Chain ID: 31)  
+**Explorer**: https://explorer.testnet.rsk.co/address/0xdb34e8611333fd6dd3a57c59f125eba8878378cd
 
 ## Deployment Options
 

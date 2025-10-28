@@ -40,6 +40,30 @@ const config: HardhatUserConfig = {
       gasPrice: 60000000,
     },
   },
+  etherscan: {
+    apiKey: {
+      rskTestnet: process.env.ROOTSTOCK_TESTNET_API_KEY || "",
+      rootstock: process.env.ROOTSTOCK_TESTNET_API_KEY || "",
+    },
+    customChains: [
+      {
+        network: "rskTestnet",
+        chainId: 31,
+        urls: {
+          apiURL: "https://api-explorer.testnet.rootstock.io/api",
+          browserURL: "https://explorer.testnet.rootstock.io"
+        }
+      },
+      {
+        network: "rootstock",
+        chainId: 31,
+        urls: {
+          apiURL: "https://api-explorer.testnet.rootstock.io/api",
+          browserURL: "https://explorer.testnet.rootstock.io"
+        }
+      }
+    ]
+  },
 };
 
 export default config;

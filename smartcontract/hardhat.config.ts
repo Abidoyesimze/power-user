@@ -24,10 +24,10 @@ const config: HardhatUserConfig = {
     },
     rskTestnet: {
       type: "http",
-      url: "https://public-node.testnet.rsk.co",
       chainId: 31,
+      url: "https://public-node.testnet.rsk.co",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      gasPrice: 60000000,
+      timeout: 60000,
     },
     rskMainnet: {
       type: "http",

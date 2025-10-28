@@ -22,25 +22,27 @@ async function main() {
   console.log("  Renewer:", RENEWER);
   console.log("  RIF Token:", RIF_TOKEN);
 
-  // Get the contract factory
-  const RNSBulkManager = await hre.viem.getContractAt(
-    "RNSBulkManager",
-    (await hre.viem.deployContract("RNSBulkManager", [
-      RNS_REGISTRY,
-      RSK_OWNER,
-      ADDR_RESOLVER,
-      FIFS_REGISTRAR,
-      RENEWER,
-      RIF_TOKEN,
-    ])) as `0x${string}`
-  );
+  // Get network and viem
+  const network = await hre.network;
+  const { viem } = await network.connect();
 
-  console.log("RNSBulkManager deployed to:", await RNSBulkManager.address);
-  console.log("\nDeployment complete!");
-  console.log("\nNext steps:");
-  console.log("1. Save the deployment address");
-  console.log("2. Update your frontend with the new address");
-  console.log("3. Update your .env file with the deployment address");
+  // Deploy the contract
+  const RNSBulkManager = await viem.deployContract("RNSBulkManager", [
+    RNS_REGISTRY,
+    RSK_OWNER,
+    ADDR_RESOLVER,
+    FIFS_REGISTRAR,
+    RENEWER,
+    RIF_TOKEN,
+  ] as `0x${string}`[]);
+
+  console.log("\n✅ RNSBulkManager deployed successfully!");
+  console.log("📍 Contract Address:", RNSBulkManager.address);
+  console.log("\n📋 Next steps:");
+  console.log("1. Save the deployment address above");
+  console.log("2. View on explorer: https://explorer.testnet.rsk.co/address/" + RNSBulkManager.address);
+  console.log("3. Update your frontend with the new address");
+  console.log("4. Add to .env: RNS_BULK_MANAGER_ADDRESS=" + RNSBulkManager.address);
 }
 
 main()

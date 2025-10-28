@@ -1,0 +1,33 @@
+{
+  "name": "smartcontract",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "hardhat test",
+    "compile": "hardhat compile",
+    "deploy:testnet": "hardhat run scripts/deploy.ts --network rskTestnet",
+    "deploy:mainnet": "hardhat run scripts/deploy.ts --network rskMainnet",
+    "verify:testnet": "hardhat verify --network rskTestnet",
+    "verify:mainnet": "hardhat verify --network rskMainnet"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ignition": "^3.0.3",
+    "@nomicfoundation/hardhat-toolbox-viem": "^5.0.0",
+    "@types/node": "^22.18.12",
+    "forge-std": "github:foundry-rs/forge-std#v1.9.4",
+    "hardhat": "^3.0.9",
+    "typescript": "~5.8.0",
+    "viem": "^2.38.5"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.4.0",
+    "@rsksmart/rns-registry": "^1.0.4",
+    "@rsksmart/rns-resolver": "^2.0.0",
+    "@rsksmart/rns-rskregistrar": "^1.2.4"
+  }
+}

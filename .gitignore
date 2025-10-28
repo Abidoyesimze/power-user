@@ -1,0 +1,31 @@
+node_modules/
+.env
+.env.local
+.cache/
+artifacts/
+cache/
+coverage/
+coverage.json
+*.log
+.DS_Store
+
+# Hardhat
+.hardhat/
+.openzeppelin/
+typechain-types/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+
+# Build files
+dist/
+build/
+*.sol.js
+

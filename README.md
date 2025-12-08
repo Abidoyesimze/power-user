@@ -12,6 +12,18 @@ RNS Bulk Manager is your one-stop dashboard for managing Rootstock Name Service 
 
 Think of it like managing multiple websites at once instead of doing them one by one.
 
+### Important: Uses Existing RNS System
+
+**RNS Bulk Manager is NOT a new RNS implementation.** It's a bulk management tool that uses the existing, official RNS infrastructure:
+
+- ✅ Uses the official RNS Registry contract
+- ✅ Uses the official FIFS Registrar contract  
+- ✅ Uses the official Renewer contract
+- ✅ All domains registered through Bulk Manager are registered on the official RNS system
+- ✅ Fully compatible with existing RNS domains and tools
+
+This is a wrapper contract that batches operations on the existing RNS contracts, making bulk management more efficient and cost-effective. Your domains are registered on the same RNS system everyone else uses - we just make it easier to manage them in bulk.
+
 ## Why Use It?
 
 ### 💰 Save Money
@@ -128,7 +140,13 @@ The more domains you manage, the more you save. Simple math, big savings.
 
 RNS Bulk Manager is built specifically for the Rootstock Name Service ecosystem. Rootstock is the most secure smart contract platform in the world, and now managing your identities on it is more accessible than ever.
 
-Whether you're a casual user securing a few domains or an organization managing hundreds, this tool makes it efficient and affordable.
+**Technical Architecture:**
+- Connects to existing RNS contracts (Registry, FIFS Registrar, Renewer, Resolver)
+- Calls the same RNS functions users would call individually
+- Batches multiple operations into single transactions
+- Handles RIF token transfers and approvals automatically
+
+Whether you're a casual user securing a few domains or an organization managing hundreds, this tool makes it efficient and affordable while using the same RNS infrastructure you trust.
 
 ## Safety & Security
 
@@ -173,6 +191,7 @@ Connect your wallet and start managing domains. No signup, no registration, just
 - **How do I get started?** Visit the live app and connect your wallet
 - **How much does it cost?** It's free to use, you only pay blockchain gas fees (which are minimized through bulk operations)
 - **Is it safe?** Yes - open source smart contract on Rootstock, you keep your keys
+- **Is this a new RNS system?** No - it uses the existing, official RNS infrastructure. All domains are registered on the same RNS system everyone uses.
 - **Can I see the code?** Absolutely, everything is on GitHub
 - **What if I have issues?** Check GitHub issues or reach out to the community
 

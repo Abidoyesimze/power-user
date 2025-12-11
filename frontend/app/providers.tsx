@@ -34,12 +34,13 @@ const rskTestnet = defineChain({
 
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "demo";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// getDefaultConfig has incomplete type definitions for custom chains
 const config = getDefaultConfig({
   appName: "RNS Bulk Manager",
   projectId,
   chains: [rskTestnet],
   ssr: true,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } as any);
 
 const queryClient = new QueryClient();

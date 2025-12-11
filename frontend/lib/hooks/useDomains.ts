@@ -181,9 +181,10 @@ export function useUserDomains() {
       console.error("Error fetching domains:", err);
       
       let errorMsg = "Failed to load domains.";
-      if (err?.message?.includes("Invalid params") || err?.message?.includes("block range")) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      if (errorMessage.includes("Invalid params") || errorMessage.includes("block range")) {
         errorMsg = "RPC block range limit reached. Try a smaller date range.";
-      } else if (err?.message?.includes("does not exist")) {
+      } else if (errorMessage.includes("does not exist")) {
         errorMsg = "RPC endpoint doesn't support event queries. Try refreshing or check your connection.";
       }
       

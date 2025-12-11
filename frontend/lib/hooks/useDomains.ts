@@ -54,9 +54,11 @@ export function useUserDomains() {
             { indexed: false, name: "count", type: "uint256" },
             { indexed: false, name: "totalCost", type: "uint256" },
           ],
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any,
         args: {
           user: address,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any,
         fromBlock,
         toBlock: "latest",
@@ -83,6 +85,7 @@ export function useUserDomains() {
           console.log("Decoded function:", decoded.functionName);
           
           if (decoded.functionName === "bulkRegister" && decoded.args) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const requests = decoded.args[0] as any[]; // First parameter is the array of requests
             console.log("Number of requests:", requests?.length);
             
@@ -174,7 +177,7 @@ export function useUserDomains() {
       if (uniqueDomains.size === 0) {
         console.log("No domains found in the last 2000 blocks. If you just registered a domain, it may take a moment to appear, or you can manually refresh.");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching domains:", err);
       
       let errorMsg = "Failed to load domains.";

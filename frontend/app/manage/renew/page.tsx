@@ -58,7 +58,7 @@ export default function RenewPage() {
           {!isLoading && domains.length === 0 && (
             <div className="bg-gray-900 rounded-lg p-12 border border-gray-700 text-center">
               <p className="text-gray-400 text-lg">
-                No domains found. Select domains from "My Domains" tab to renew them here.
+                No domains found. Select domains from &quot;My Domains&quot; tab to renew them here.
               </p>
             </div>
           )}

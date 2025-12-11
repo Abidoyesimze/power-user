@@ -128,7 +128,7 @@ export default function NameSearch() {
         Check Domain Availability
       </h2>
       <p className="text-gray-400 mb-6">
-        Search for .rsk domains and see if they're available for registration
+        Search for .rsk domains and see if they&apos;re available for registration
       </p>
 
       <div className="flex gap-4">

@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useRNSBulkManager } from "@/lib/hooks/useContract";
-import { useAccount } from "wagmi";
 import { toast } from "react-toastify";
 import { useUserDomains } from "@/lib/hooks/useDomains";
 
@@ -15,10 +14,9 @@ interface DomainStatus {
 
 export default function RegisterTab() {
   const [domains, setDomains] = useState<DomainStatus[]>([{ name: "", duration: "1" }]);
-  const { bulkRegister, isConnected, isLoading, address, hash, isConfirming, isConfirmed, reset, checkAvailability } = useRNSBulkManager();
+  const { bulkRegister, isConnected, isLoading, address, hash, isConfirmed, reset, checkAvailability } = useRNSBulkManager();
   const { refetch: refetchDomains } = useUserDomains();
   const [isProcessing, setIsProcessing] = useState(false);
-  const [checkingDomains, setCheckingDomains] = useState(false);
 
   const addDomain = () => {
     setDomains([...domains, { name: "", duration: "1" }]);

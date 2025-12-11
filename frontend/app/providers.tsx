@@ -34,6 +34,7 @@ const rskTestnet = defineChain({
 
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "demo";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const config = getDefaultConfig({
   appName: "RNS Bulk Manager",
   projectId,

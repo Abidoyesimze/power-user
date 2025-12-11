@@ -4,8 +4,10 @@ export const RNS_BULK_MANAGER_ADDRESS = '0xdb34e8611333fd6dd3a57c59f125eba887837
 
 export const RNS_BULK_MANAGER_ABI = RNSBulkManagerABI;
 
-export default {
+const rnsBulkManagerConfig = {
   address: RNS_BULK_MANAGER_ADDRESS,
   abi: RNS_BULK_MANAGER_ABI,
 };
+
+export default rnsBulkManagerConfig;
 

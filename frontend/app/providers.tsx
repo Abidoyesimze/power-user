@@ -20,7 +20,7 @@ const rskTestnet = defineChain({
   },
   rpcUrls: {
     default: {
-      http: [process.env.NEXT_PUBLIC_RPC_URL || "https://public-node.testnet.rsk.co"],
+      http: [process.env.NEXT_PUBLIC_RPC_URL || "https://rpc.testnet.rootstock.io/eB6SwV0sOgFuotmD35JzhuCqpnYf8W-T"],
     },
   },
   blockExplorers: {

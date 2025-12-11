@@ -21,14 +21,41 @@
     "@types/node": "^22.18.12",
     "dotenv": "^17.2.3",
     "forge-std": "github:foundry-rs/forge-std#v1.9.4",
-    "hardhat": "^3.0.9",
+    "hardhat": "^3.1.0",
     "typescript": "~5.8.0",
     "viem": "^2.38.5"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "^5.4.0",
-    "@rsksmart/rns-registry": "^1.0.4",
-    "@rsksmart/rns-resolver": "^2.0.0",
-    "@rsksmart/rns-rskregistrar": "^1.2.4"
+    "@openzeppelin/contracts": "^5.1.0"
+  },
+  "overrides": {
+    "@openzeppelin/contracts": "^5.1.0",
+    "elliptic": "^6.6.1",
+    "minimist": "^1.2.8",
+    "semver": "^7.7.3",
+    "json5": "^2.2.3",
+    "js-yaml": "^4.1.0",
+    "minimatch": "^3.1.2",
+    "braces": "^3.0.3",
+    "nanoid": "^5.0.8",
+    "tar": "^6.2.1",
+    "tough-cookie": "^4.1.4",
+    "validator": "^13.15.0",
+    "ws": "^8.18.0",
+    "yargs-parser": "^21.1.1",
+    "ansi-regex": "^6.0.1",
+    "base-x": "^4.0.0",
+    "brace-expansion": "^2.0.1",
+    "browserify-sign": "^4.2.2",
+    "cross-spawn": "^7.0.6",
+    "diff": "^5.1.0",
+    "form-data": "^4.0.1",
+    "pbkdf2": "^3.1.2",
+    "secp256k1": "^5.0.1",
+    "sha.js": "^2.4.11",
+    "serialize-javascript": "^6.0.1",
+    "ajv": "^8.17.1",
+    "follow-redirects": "^1.15.11",
+    "axios": "^1.7.9"
   }
 }

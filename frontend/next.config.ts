@@ -2,8 +2,9 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
-  // Fix multiple lockfiles warning
-  outputFileTracingRoot: path.join(__dirname, "../../"),
+  // Fix multiple lockfiles warning - explicitly set root to frontend directory
+  // This tells Next.js to use frontend/package-lock.json and ignore any root-level lockfile
+  outputFileTracingRoot: path.resolve(__dirname),
   
   // Suppress module resolution warnings for optional dependencies
   webpack: (config, { isServer }) => {

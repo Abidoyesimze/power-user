@@ -15,6 +15,8 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
+    // Next.js requires jsx: "preserve" - this is correct and intentional
+    // Next.js implements its own optimized JSX transform
     "jsx": "preserve",
     "incremental": true,
     "plugins": [

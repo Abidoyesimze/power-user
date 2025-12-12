@@ -49,7 +49,7 @@ export default function RegisterTab() {
   };
   
   const calculatePrices = async () => {
-    // Only calculate prices for domains that are available (not unavailable, not still checking)
+    // Only calculate prices for domains that are confirmed available
     const validDomains = domains.filter(d => 
       d.name.trim() && 
       d.isAvailable === true && // Only calculate for confirmed available domains
@@ -66,10 +66,18 @@ export default function RegisterTab() {
       const names = validDomains.map(d => d.name.trim());
       const durations = validDomains.map(d => BigInt(parseInt(d.duration) * 365 * 24 * 60 * 60));
       
+      // Only calculate if we have valid domains
+      if (names.length === 0 || names.some(n => !n)) {
+        setTotalPrice(BigInt(0));
+        return;
+      }
+      
       const total = await calculateRegistrationCost(names, durations);
       setTotalPrice(total);
     } catch (error) {
       console.error("Error calculating prices:", error);
+      // If price calculation fails (e.g., domain not available), set to 0
+      // This can happen if a domain becomes unavailable between availability check and price calculation
       setTotalPrice(BigInt(0));
     } finally {
       setIsCalculatingTotal(false);

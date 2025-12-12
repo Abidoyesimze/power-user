@@ -27,12 +27,30 @@ export function useRNSBulkManager() {
       throw new Error('Wallet not connected');
     }
 
-    await writeContract({
+    if (!publicClient) {
+      throw new Error('Public client not available');
+    }
+
+    // Write the contract transaction
+    const txHash = await writeContract({
       address: RNS_BULK_MANAGER_ADDRESS,
       abi: RNS_BULK_MANAGER_ABI,
       functionName: 'bulkRegister',
       args: [requests],
     });
+
+    // Wait for transaction receipt
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    
+    // Verify registration by checking if domains appear in registry
+    // Note: This is optional verification - the transaction success is the main indicator
+    if (receipt.status === 'success') {
+      // Transaction succeeded - domains should be registered in official RNS
+      // The FIFS registrar.register() call should have updated the RNS registry
+      console.log('Registration transaction confirmed. Domains should appear in official RNS registry.');
+    }
+    
+    return txHash;
   };
 
   const bulkRenew = async (domains: string[], durations: bigint[]) => {

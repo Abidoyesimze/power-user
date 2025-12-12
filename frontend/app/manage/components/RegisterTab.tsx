@@ -239,7 +239,19 @@ export default function RegisterTab() {
         return newSet;
       });
       
-      toast.success(`Successfully registered ${domains.length} domain${domains.length > 1 ? 's' : ''}! The transaction has been confirmed.`);
+      const domainList = registeredNames.map(n => `${n}.rsk`).join(", ");
+      toast.success(
+        `Successfully registered ${domains.length} domain${domains.length > 1 ? 's' : ''}! The transaction has been confirmed.`,
+        { autoClose: 6000 }
+      );
+      
+      // Show additional info about official RNS visibility
+      setTimeout(() => {
+        toast.info(
+          `Your domains (${domainList}) are registered through the official RNS FIFS registrar and should appear in the RIF app. If they don't appear immediately, please wait a few moments for the registry to update.`,
+          { autoClose: 10000 }
+        );
+      }, 2000);
       
       // Clear the form
       setDomains([{ name: "", duration: "1" }]);

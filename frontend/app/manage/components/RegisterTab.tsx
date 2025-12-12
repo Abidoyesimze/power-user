@@ -140,7 +140,10 @@ export default function RegisterTab() {
       
       // Recalculate prices after availability check
       if (available) {
-        calculatePrices();
+        // Small delay to ensure state is updated before calculating prices
+        setTimeout(() => {
+          calculatePrices();
+        }, 200);
       } else {
         setTotalPrice(BigInt(0)); // Clear price if domain is unavailable
       }
@@ -154,15 +157,23 @@ export default function RegisterTab() {
     }
   };
   
-  // Calculate prices when domains change
+  // Calculate prices when domains change (only for available domains)
   useEffect(() => {
+    // Only calculate if we have at least one confirmed available domain
+    const hasAvailableDomain = domains.some(d => d.name.trim() && d.isAvailable === true && !d.isChecking);
+    
+    if (!hasAvailableDomain) {
+      setTotalPrice(BigInt(0));
+      return;
+    }
+    
     const timer = setTimeout(() => {
       calculatePrices();
     }, 500); // Debounce price calculation
     
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [domains.map(d => `${d.name}-${d.duration}`).join(',')]);
+  }, [domains.map(d => `${d.name}-${d.duration}-${d.isAvailable}`).join(',')]);
 
   // Show success message when transaction is confirmed
   useEffect(() => {

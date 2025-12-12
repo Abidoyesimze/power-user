@@ -20,7 +20,12 @@ const rskTestnet = defineChain({
   },
   rpcUrls: {
     default: {
-      http: [process.env.NEXT_PUBLIC_RPC_URL || "https://rpc.testnet.rootstock.io/eB6SwV0sOgFuotmD35JzhuCqpnYf8W-T"],
+      // Use RPC URL from env or fallback to one that supports eth_getLogs
+      // The public-node.testnet.rsk.co does NOT support eth_getLogs
+      http: [
+        process.env.NEXT_PUBLIC_RPC_URL || 
+        "https://rpc.testnet.rootstock.io/eB6SwV0sOgFuotmD35JzhuCqpnYf8W-T"
+      ],
     },
   },
   blockExplorers: {

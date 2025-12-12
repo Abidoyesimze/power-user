@@ -44,6 +44,8 @@ export function useUserDomains() {
       const fromBlock = currentBlock > BigInt(2000) ? currentBlock - BigInt(2000) : BigInt(0);
 
       // Query BulkRegistration events from our contract
+      // Note: This requires an RPC endpoint that supports eth_getLogs
+      // The default RPC URL in providers.tsx should support this
       const bulkRegistrationLogs = await publicClient.getLogs({
         address: RNS_BULK_MANAGER,
         event: {

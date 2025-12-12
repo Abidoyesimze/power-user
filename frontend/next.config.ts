@@ -15,14 +15,18 @@ const nextConfig: NextConfig = {
       "pino-pretty": false,
     };
     
-    // Ignore these modules in webpack
-    config.externals = config.externals || [];
-    if (!isServer) {
-      config.externals.push({
-        "@react-native-async-storage/async-storage": "commonjs @react-native-async-storage/async-storage",
-        "pino-pretty": "commonjs pino-pretty",
-      });
-    }
+    // Suppress warnings for optional dependencies
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings || []),
+      {
+        module: /node_modules\/@metamask\/sdk/,
+        message: /Can't resolve '@react-native-async-storage\/async-storage'/,
+      },
+      {
+        module: /node_modules\/pino/,
+        message: /Can't resolve 'pino-pretty'/,
+      },
+    ];
     
     return config;
   },

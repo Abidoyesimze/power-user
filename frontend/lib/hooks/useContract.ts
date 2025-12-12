@@ -202,6 +202,7 @@ export function useRNSBulkManager() {
       // Step 3: Determine availability based on both checks
       // Domain is UNAVAILABLE if:
       // - FIFS says it's not available (false), OR
+      // - FIFS call reverted (fifsAvailable === false), OR
       // - Registry has a non-zero owner
       const isRegistered = 
         fifsAvailable === false || 
@@ -211,14 +212,15 @@ export function useRNSBulkManager() {
         return false; // Domain is registered/unavailable
       }
       
-      // Domain appears to be available
-      // Only return true if FIFS registrar explicitly says so OR registry owner is zero
-      if (fifsAvailable === true || (registryOwner === "0x0000000000000000000000000000000000000000" || !registryOwner)) {
+      // Domain is ONLY available if FIFS registrar explicitly says so (true)
+      // We don't trust registry owner being zero alone, because FIFS registrar might have issues
+      // If FIFS registrar says available, then it's available
+      if (fifsAvailable === true) {
         return true;
       }
       
-      // Uncertain state - FIFS call reverted but registry shows zero
-      // Treat as unavailable to be safe
+      // If FIFS registrar reverted or returned false, treat as unavailable
+      // This ensures consistency - if FIFS can't tell us it's available, we can't calculate price
       return false;
     } catch (error) {
       console.error('Error checking availability:', error);

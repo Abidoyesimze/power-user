@@ -169,10 +169,10 @@ export function useRNSBulkManager() {
           });
           fifsAvailable = available as boolean;
         } catch (fifsCallError) {
-          // If FIFS registrar call reverts, it might mean the domain is invalid or taken
-          // We'll check the registry to be sure
-          console.warn('FIFS registrar available() call reverted:', fifsCallError);
-          fifsAvailable = null;
+          // If FIFS registrar call reverts, the domain is NOT available
+          // FIFS registrar reverts for unavailable/invalid domains
+          console.warn('FIFS registrar available() call reverted - domain is unavailable:', fifsCallError);
+          fifsAvailable = false; // Treat revert as unavailable
         }
       } catch (fifsError) {
         console.warn('Could not get FIFS registrar address:', fifsError);

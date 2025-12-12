@@ -305,15 +305,16 @@ export default function RegisterTab() {
       setIsProcessing(true);
       toast.info("Preparing registration transaction...");
       
-      // For FIFS registration, secret is just empty bytes32 (0x0000...0000)
-      const emptySecret = "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`;
-      
-      const requests = domains.map((d) => ({
-        name: d.name,
-        owner: address, // Use connected wallet address
-        secret: emptySecret, // Empty bytes32 for FIFS
-        duration: BigInt(parseInt(d.duration) * 365 * 24 * 60 * 60),
-      }));
+          // For FIFS registration, secret is just empty bytes32 (0x0000...0000)
+          // IMPORTANT: FIFS registrar expects domain names WITHOUT the .rsk suffix
+          const emptySecret = "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`;
+          
+          const requests = domains.map((d) => ({
+            name: d.name.trim().replace(/\.rsk$/i, ''), // Remove .rsk suffix if present (FIFS registrar expects name without TLD)
+            owner: address, // Use connected wallet address
+            secret: emptySecret, // Empty bytes32 for FIFS
+            duration: BigInt(parseInt(d.duration) * 365 * 24 * 60 * 60),
+          }));
 
       await bulkRegister(requests);
       

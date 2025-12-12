@@ -26,9 +26,10 @@ export default function NameSearch() {
     setSearchResult(null);
 
     try {
-      // Normalize the domain name (without .rsk for FIFS registrar)
-      const domainName = searchTerm.toLowerCase().trim().replace(".rsk", "");
-      const normalizedName = `${domainName}.rsk`;
+          // Normalize the domain name (without .rsk for FIFS registrar)
+          // FIFS registrar expects domain names WITHOUT the .rsk suffix
+          const domainName = searchTerm.toLowerCase().trim().replace(/\.rsk$/i, "");
+          const normalizedName = `${domainName}.rsk`;
 
       if (!publicClient) {
         throw new Error("Public client not available");

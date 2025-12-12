@@ -248,8 +248,8 @@ export default function RegisterTab() {
       // Show additional info about official RNS visibility
       setTimeout(() => {
         toast.info(
-          `Your domains (${domainList}) are registered through the official RNS FIFS registrar and should appear in the RIF app. If they don't appear immediately, please wait a few moments for the registry to update.`,
-          { autoClose: 10000 }
+          `Your domains (${domainList}) are registered through the official RNS FIFS registrar (same as the RIF app). They should appear in the official RIF app shortly. Note: On testnet, there may be a delay before domains appear in the RIF app due to registry update timing.`,
+          { autoClose: 12000 }
         );
       }, 2000);
       

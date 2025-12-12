@@ -22,7 +22,7 @@ export function useRNSBulkManager() {
     return namehash(normalizedName);
   };
 
-  const bulkRegister = async (requests: Array<{ name: string; owner: `0x${string}`; secret: `0x${string}`; duration: bigint }>) => {
+  const bulkRegister = async (requests: Array<{ name: string; owner: `0x${string}`; secret: `0x${string}`; duration: bigint; addr: `0x${string}` }>) => {
     if (!isConnected || !address) {
       throw new Error('Wallet not connected');
     }
@@ -47,9 +47,11 @@ export function useRNSBulkManager() {
     }
 
     // Format the renewal requests
+    // Note: expires is required but can be 0 if unknown - contract may handle it
     const requests = domains.map((name, index) => ({
       name,
       duration: durations[index] || BigInt(365 * 86400), // Default to 1 year
+      expires: BigInt(0), // Use 0 as default - contract may calculate from current expiration
     }));
 
     // Write to contract
@@ -107,7 +109,7 @@ export function useRNSBulkManager() {
     return result as bigint;
   };
 
-  const calculateRenewalCost = async (names: string[], durations: bigint[]): Promise<bigint> => {
+  const calculateRenewalCost = async (names: string[], expires: bigint[], durations: bigint[]): Promise<bigint> => {
     if (!publicClient) {
       throw new Error('Public client not available');
     }
@@ -116,7 +118,7 @@ export function useRNSBulkManager() {
       address: RNS_BULK_MANAGER_ADDRESS,
       abi: RNS_BULK_MANAGER_ABI,
       functionName: 'calculateRenewalCost',
-      args: [names, durations],
+      args: [names, expires, durations],
     });
 
     return result as bigint;

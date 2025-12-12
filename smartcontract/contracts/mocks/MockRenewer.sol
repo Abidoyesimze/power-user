@@ -18,13 +18,14 @@ contract MockRenewer is IRenewer {
     
     function renew(string memory name, uint256 duration) external override returns (uint256) {
         require(registered[name], "Domain not registered");
-        uint256 priceToPay = this.price(name, duration);
+        uint256 priceToPay = this.price(name, 0, duration);
         require(token.transferFrom(msg.sender, address(this), priceToPay), "Payment failed");
         return 1;
     }
     
-    function price(string memory name, uint256 duration) external view override returns (uint256) {
+    function price(string memory name, uint256 expires, uint256 duration) external view override returns (uint256) {
         // Renewal price is 50 tokens per character per year
+        // expires parameter is ignored in mock (can be 0 for testing)
         uint256 basePrice = 50 * (10**18);
         uint256 nameLength = bytes(name).length;
         return (basePrice * nameLength * duration) / 365 days;

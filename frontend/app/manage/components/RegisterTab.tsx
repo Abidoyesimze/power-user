@@ -332,6 +332,7 @@ export default function RegisterTab() {
             owner: address, // Use connected wallet address
             secret: emptySecret, // Empty bytes32 for FIFS
             duration: BigInt(parseInt(d.duration) * 365 * 24 * 60 * 60),
+            addr: address, // Address to set for the domain after registration (use owner address by default)
           }));
 
       await bulkRegister(requests);

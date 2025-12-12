@@ -97,6 +97,7 @@ async function main() {
       {
         inputs: [
           { name: "name", type: "string" },
+          { name: "expires", type: "uint256" },
           { name: "duration", type: "uint256" },
         ],
         name: "price",
@@ -106,11 +107,12 @@ async function main() {
       },
     ] as const;
 
+    // For new registrations, expires = 0
     price = await publicClient.readContract({
       address: FIFS_REGISTRAR as `0x${string}`,
       abi: fifsRegistrarAbi,
       functionName: "price",
-      args: [testDomainName, testDuration],
+      args: [testDomainName, 0n, testDuration],
     });
 
     console.log("  💰 Registration price:", price.toString(), "RIF (wei)");

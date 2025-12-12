@@ -98,9 +98,10 @@ describe("RNSBulkManager", async function () {
       const totalCost = await bulkManager.read.calculateRegistrationCost([names, durations]);
       
       // Verify against manual calculation
+      // For new registrations, expires = 0
       let manualTotal = 0n;
       for (let i = 0; i < names.length; i++) {
-        const price = await mockFIFSRegistrar.read.price([names[i], durations[i]]);
+        const price = await mockFIFSRegistrar.read.price([names[i], 0n, durations[i]]);
         manualTotal += price;
       }
       
@@ -109,14 +110,15 @@ describe("RNSBulkManager", async function () {
     
     it("Should calculate renewal costs correctly", async function () {
       const names = ["renewcalc1", "renewcalc2"];
+      const expires = [0n, 0n]; // Use 0 for testing (mock ignores expires)
       const durations = [BigInt(365 * 24 * 60 * 60), BigInt(730 * 24 * 60 * 60)];
       
-      const totalCost = await bulkManager.read.calculateRenewalCost([names, durations]);
+      const totalCost = await bulkManager.read.calculateRenewalCost([names, expires, durations]);
       
       // Verify against manual calculation
       let manualTotal = 0n;
       for (let i = 0; i < names.length; i++) {
-        const price = await mockRenewer.read.price([names[i], durations[i]]);
+        const price = await mockRenewer.read.price([names[i], expires[i], durations[i]]);
         manualTotal += price;
       }
       

@@ -35,11 +35,13 @@ contract RNSBulkManager {
         address owner;
         bytes32 secret;
         uint256 duration;
+        address addr; // Address to set for the domain after registration
     }
     
     struct RenewalRequest {
         string name;
         uint256 duration;
+        uint256 expires; // Current expiration timestamp (use 0 if unknown, contract may handle it)
     }
     
     struct AddressUpdateRequest {
@@ -108,8 +110,9 @@ contract RNSBulkManager {
         uint256 totalCost = 0;
         
         // Calculate total cost first
+        // For new registrations, expires = 0
         for (uint256 i = 0; i < requests.length; i++) {
-            try fifsRegistrar.price(requests[i].name, requests[i].duration) returns (uint256 cost) {
+            try fifsRegistrar.price(requests[i].name, 0, requests[i].duration) returns (uint256 cost) {
                 totalCost += cost;
             } catch {
                 results[i] = OperationResult(false, i, "Failed to get price");
@@ -137,7 +140,8 @@ contract RNSBulkManager {
                 requests[i].name,
                 requests[i].owner,
                 requests[i].secret,
-                requests[i].duration
+                requests[i].duration,
+                requests[i].addr
             ) {
                 results[i] = OperationResult(true, i, "");
                 successCount++;
@@ -173,7 +177,7 @@ contract RNSBulkManager {
         
         // Calculate total cost
         for (uint256 i = 0; i < requests.length; i++) {
-            try renewer.price(requests[i].name, requests[i].duration) returns (uint256 cost) {
+            try renewer.price(requests[i].name, requests[i].expires, requests[i].duration) returns (uint256 cost) {
                 totalCost += cost;
             } catch {
                 results[i] = OperationResult(false, i, "Failed to get renewal price");
@@ -360,8 +364,9 @@ contract RNSBulkManager {
     ) external view returns (uint256 totalCost) {
         require(names.length == durations.length, "Array length mismatch");
         
+        // For new registrations, expires = 0
         for (uint256 i = 0; i < names.length; i++) {
-            totalCost += fifsRegistrar.price(names[i], durations[i]);
+            totalCost += fifsRegistrar.price(names[i], 0, durations[i]);
         }
         
         return totalCost;
@@ -375,12 +380,14 @@ contract RNSBulkManager {
      */
     function calculateRenewalCost(
         string[] calldata names,
+        uint256[] calldata expires,
         uint256[] calldata durations
     ) external view returns (uint256 totalCost) {
         require(names.length == durations.length, "Array length mismatch");
+        require(names.length == expires.length, "Array length mismatch");
         
         for (uint256 i = 0; i < names.length; i++) {
-            totalCost += renewer.price(names[i], durations[i]);
+            totalCost += renewer.price(names[i], expires[i], durations[i]);
         }
         
         return totalCost;

@@ -84,6 +84,38 @@ describe("RNSBulkManager", async function () {
       // Should be greater than 0
       assert.ok(totalCost > 0n);
     });
+    
+    it("Should register domains with new interface (addr parameter)", async function () {
+      const walletClient = await viem.getWalletClient({ account: user1 });
+      const bulkManagerWithAccount = await viem.getContractAt("RNSBulkManager", bulkManager.address, { walletClient });
+      const erc20WithAccount = await viem.getContractAt("MockERC20", mockERC20.address, { walletClient });
+      
+      // Approve tokens for bulk manager
+      const names = ["regtest1", "regtest2"];
+      const durations = [BigInt(365 * 24 * 60 * 60), BigInt(365 * 24 * 60 * 60)];
+      const totalCost = await bulkManager.read.calculateRegistrationCost([names, durations]);
+      
+      await erc20WithAccount.write.approve([bulkManager.address, totalCost]);
+      
+      // Create registration requests with new interface (including addr parameter)
+      const emptySecret = "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`;
+      const requests = names.map((name, index) => ({
+        name,
+        owner: user1,
+        secret: emptySecret,
+        duration: durations[index],
+        addr: user1, // New addr parameter - set to owner address
+      }));
+      
+      // Register domains
+      const result = await bulkManagerWithAccount.write.bulkRegister([requests]);
+      
+      // Verify domains are registered
+      for (const name of names) {
+        const isRegistered = await mockFIFSRegistrar.read.registered([name]);
+        assert.ok(isRegistered, `Domain ${name} should be registered`);
+      }
+    });
   });
   
   describe("Cost Calculation", function () {
@@ -98,9 +130,10 @@ describe("RNSBulkManager", async function () {
       const totalCost = await bulkManager.read.calculateRegistrationCost([names, durations]);
       
       // Verify against manual calculation
+      // For new registrations, expires = 0
       let manualTotal = 0n;
       for (let i = 0; i < names.length; i++) {
-        const price = await mockFIFSRegistrar.read.price([names[i], durations[i]]);
+        const price = await mockFIFSRegistrar.read.price([names[i], 0n, durations[i]]);
         manualTotal += price;
       }
       
@@ -109,14 +142,15 @@ describe("RNSBulkManager", async function () {
     
     it("Should calculate renewal costs correctly", async function () {
       const names = ["renewcalc1", "renewcalc2"];
+      const expires = [0n, 0n]; // Use 0 for testing (mock ignores expires)
       const durations = [BigInt(365 * 24 * 60 * 60), BigInt(730 * 24 * 60 * 60)];
       
-      const totalCost = await bulkManager.read.calculateRenewalCost([names, durations]);
+      const totalCost = await bulkManager.read.calculateRenewalCost([names, expires, durations]);
       
       // Verify against manual calculation
       let manualTotal = 0n;
       for (let i = 0; i < names.length; i++) {
-        const price = await mockRenewer.read.price([names[i], durations[i]]);
+        const price = await mockRenewer.read.price([names[i], expires[i], durations[i]]);
         manualTotal += price;
       }
       
@@ -161,6 +195,46 @@ describe("RNSBulkManager", async function () {
       // Note: view functions may not have access to msg.sender in Hardhat
       // So we verify the direct ownership which is what matters
       assert.ok(results.length === 3, "Should return 3 results");
+    });
+  });
+  
+  describe("Bulk Renewal", function () {
+    it("Should renew domains with new interface (expires parameter)", async function () {
+      const walletClient = await viem.getWalletClient({ account: user1 });
+      const bulkManagerWithAccount = await viem.getContractAt("RNSBulkManager", bulkManager.address, { walletClient });
+      const erc20WithAccount = await viem.getContractAt("MockERC20", mockERC20.address, { walletClient });
+      
+      // First register some domains
+      const deployerWallet = await viem.getWalletClient({ account: deployer });
+      const mockFIFSWithDeployer = await viem.getContractAt("MockFIFSRegistrar", mockFIFSRegistrar.address, { walletClient: deployerWallet });
+      const names = ["renewtest1", "renewtest2"];
+      
+      for (const name of names) {
+        await mockRenewer.write.registerDirect([name]);
+      }
+      
+      // Approve tokens for renewal
+      const expires = [0n, 0n]; // Use 0 for testing (mock ignores expires)
+      const durations = [BigInt(365 * 24 * 60 * 60), BigInt(365 * 24 * 60 * 60)];
+      const totalCost = await bulkManager.read.calculateRenewalCost([names, expires, durations]);
+      
+      await erc20WithAccount.write.approve([bulkManager.address, totalCost]);
+      
+      // Create renewal requests with new interface (including expires parameter)
+      const requests = names.map((name, index) => ({
+        name,
+        duration: durations[index],
+        expires: expires[index], // New expires parameter
+      }));
+      
+      // Renew domains
+      await bulkManagerWithAccount.write.bulkRenew([requests]);
+      
+      // Verify domains are still registered (renewal doesn't change registration status in mock)
+      for (const name of names) {
+        const isRegistered = await mockRenewer.read.registered([name]);
+        assert.ok(isRegistered, `Domain ${name} should still be registered after renewal`);
+      }
     });
   });
   

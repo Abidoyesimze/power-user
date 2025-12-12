@@ -22,7 +22,7 @@ export function useRNSBulkManager() {
     return namehash(normalizedName);
   };
 
-  const bulkRegister = async (requests: Array<{ name: string; owner: `0x${string}`; secret: `0x${string}`; duration: bigint }>) => {
+  const bulkRegister = async (requests: Array<{ name: string; owner: `0x${string}`; secret: `0x${string}`; duration: bigint; addr: `0x${string}` }>) => {
     if (!isConnected || !address) {
       throw new Error('Wallet not connected');
     }
@@ -47,9 +47,11 @@ export function useRNSBulkManager() {
     }
 
     // Format the renewal requests
+    // Note: expires is required but can be 0 if unknown - contract may handle it
     const requests = domains.map((name, index) => ({
       name,
       duration: durations[index] || BigInt(365 * 86400), // Default to 1 year
+      expires: BigInt(0), // Use 0 as default - contract may calculate from current expiration
     }));
 
     // Write to contract
@@ -107,7 +109,7 @@ export function useRNSBulkManager() {
     return result as bigint;
   };
 
-  const calculateRenewalCost = async (names: string[], durations: bigint[]): Promise<bigint> => {
+  const calculateRenewalCost = async (names: string[], expires: bigint[], durations: bigint[]): Promise<bigint> => {
     if (!publicClient) {
       throw new Error('Public client not available');
     }
@@ -116,7 +118,7 @@ export function useRNSBulkManager() {
       address: RNS_BULK_MANAGER_ADDRESS,
       abi: RNS_BULK_MANAGER_ABI,
       functionName: 'calculateRenewalCost',
-      args: [names, durations],
+      args: [names, expires, durations],
     });
 
     return result as bigint;
@@ -129,8 +131,9 @@ export function useRNSBulkManager() {
 
     try {
       // Normalize domain name (without .rsk for FIFS registrar)
-      const domainName = name.toLowerCase().trim().replace('.rsk', '');
-      const normalizedName = domainName.endsWith('.rsk') ? domainName : `${domainName}.rsk`;
+      // FIFS registrar expects domain names WITHOUT the .rsk suffix
+      const domainName = name.toLowerCase().trim().replace(/\.rsk$/i, '');
+      const normalizedName = `${domainName}.rsk`;
       const RNS_REGISTRY = "0x7d284aaac6e925aad802a53c0c69efe3764597b8" as const;
       const node = namehash(normalizedName);
       
@@ -168,10 +171,10 @@ export function useRNSBulkManager() {
           });
           fifsAvailable = available as boolean;
         } catch (fifsCallError) {
-          // If FIFS registrar call reverts, it might mean the domain is invalid or taken
-          // We'll check the registry to be sure
-          console.warn('FIFS registrar available() call reverted:', fifsCallError);
-          fifsAvailable = null;
+          // If FIFS registrar call reverts, the domain is NOT available
+          // FIFS registrar reverts for unavailable/invalid domains
+          console.warn('FIFS registrar available() call reverted - domain is unavailable:', fifsCallError);
+          fifsAvailable = false; // Treat revert as unavailable
         }
       } catch (fifsError) {
         console.warn('Could not get FIFS registrar address:', fifsError);
@@ -199,30 +202,39 @@ export function useRNSBulkManager() {
       }
       
       // Step 3: Determine availability based on both checks
-      // Domain is UNAVAILABLE if:
-      // - FIFS says it's not available (false), OR
-      // - Registry has a non-zero owner
-      const isRegistered = 
-        fifsAvailable === false || 
-        (registryOwner && registryOwner !== "0x0000000000000000000000000000000000000000");
+      // Priority: Registry owner check is most reliable (especially on testnet)
+      // FIFS registrar is used as secondary confirmation
       
-      if (isRegistered) {
-        return false; // Domain is registered/unavailable
+      // Domain is UNAVAILABLE if registry has a non-zero owner
+      if (registryOwner && registryOwner !== "0x0000000000000000000000000000000000000000") {
+        return false; // Domain is registered
       }
       
-      // Domain appears to be available
-      // Only return true if FIFS registrar explicitly says so OR registry owner is zero
-      if (fifsAvailable === true || (registryOwner === "0x0000000000000000000000000000000000000000" || !registryOwner)) {
-        return true;
+      // If registry owner is zero, domain is likely available
+      // Use FIFS registrar as confirmation if available
+      if (registryOwner === "0x0000000000000000000000000000000000000000" || !registryOwner) {
+        // Registry says available - check FIFS for confirmation
+        if (fifsAvailable === true) {
+          return true; // Both registry and FIFS confirm available
+        }
+        
+        // FIFS registrar reverted or returned false, but registry says available
+        // On testnet, FIFS registrar may have issues, so trust the registry
+        // If registry owner is zero, domain is available
+        if (fifsAvailable === false || fifsAvailable === null) {
+          // FIFS registrar has issues on testnet, but registry is reliable
+          // Trust the registry - if owner is zero, domain is available
+          return true;
+        }
       }
       
-      // Uncertain state - FIFS call reverted but registry shows zero
-      // Treat as unavailable to be safe
+      // Default: if we can't determine, assume unavailable to be safe
       return false;
     } catch (error) {
       console.error('Error checking availability:', error);
-      // If we can't check, assume it's available (let the contract handle the error)
-      return true;
+      // If we can't check, assume it's unavailable to be safe
+      // This prevents false positives where domain shows available but registration fails
+      return false;
     }
   };
 

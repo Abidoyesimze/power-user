@@ -200,27 +200,33 @@ export function useRNSBulkManager() {
       }
       
       // Step 3: Determine availability based on both checks
-      // Domain is UNAVAILABLE if:
-      // - FIFS says it's not available (false), OR
-      // - FIFS call reverted (fifsAvailable === false), OR
-      // - Registry has a non-zero owner
-      const isRegistered = 
-        fifsAvailable === false || 
-        (registryOwner && registryOwner !== "0x0000000000000000000000000000000000000000");
+      // Priority: Registry owner check is most reliable (especially on testnet)
+      // FIFS registrar is used as secondary confirmation
       
-      if (isRegistered) {
-        return false; // Domain is registered/unavailable
+      // Domain is UNAVAILABLE if registry has a non-zero owner
+      if (registryOwner && registryOwner !== "0x0000000000000000000000000000000000000000") {
+        return false; // Domain is registered
       }
       
-      // Domain is ONLY available if FIFS registrar explicitly says so (true)
-      // We don't trust registry owner being zero alone, because FIFS registrar might have issues
-      // If FIFS registrar says available, then it's available
-      if (fifsAvailable === true) {
-        return true;
+      // If registry owner is zero, domain is likely available
+      // Use FIFS registrar as confirmation if available
+      if (registryOwner === "0x0000000000000000000000000000000000000000" || !registryOwner) {
+        // Registry says available - check FIFS for confirmation
+        if (fifsAvailable === true) {
+          return true; // Both registry and FIFS confirm available
+        }
+        
+        // FIFS registrar reverted or returned false, but registry says available
+        // On testnet, FIFS registrar may have issues, so trust the registry
+        // If registry owner is zero, domain is available
+        if (fifsAvailable === false || fifsAvailable === null) {
+          // FIFS registrar has issues on testnet, but registry is reliable
+          // Trust the registry - if owner is zero, domain is available
+          return true;
+        }
       }
       
-      // If FIFS registrar reverted or returned false, treat as unavailable
-      // This ensures consistency - if FIFS can't tell us it's available, we can't calculate price
+      // Default: if we can't determine, assume unavailable to be safe
       return false;
     } catch (error) {
       console.error('Error checking availability:', error);

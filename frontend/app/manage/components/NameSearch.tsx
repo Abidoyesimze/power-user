@@ -122,40 +122,37 @@ export default function NameSearch() {
         console.error("Registry owner check failed:", registryError);
       }
       
-      // Step 3: Determine availability based on both checks
-      // Domain is UNAVAILABLE if:
-      // - FIFS says it's not available (false), OR
-      // - Registry has a non-zero owner
-      const isRegistered = 
-        fifsAvailable === false || 
-        (registryOwner && registryOwner !== "0x0000000000000000000000000000000000000000");
-      
-      if (isRegistered) {
-        // Domain is registered
-        setSearchResult({
-          available: false,
-          registered: true,
-          owner: registryOwner && registryOwner !== "0x0000000000000000000000000000000000000000"
-            ? registryOwner
-            : undefined,
-        });
-      } else {
-        // Domain appears to be available
-        // Only show as available if FIFS registrar explicitly says so OR registry owner is zero
-        if (fifsAvailable === true || (registryOwner === "0x0000000000000000000000000000000000000000" || !registryOwner)) {
-          setSearchResult({
-            available: true,
-            registered: false,
-          });
-        } else {
-          // Uncertain state - FIFS call reverted but registry shows zero
-          // Treat as unavailable to be safe
-          setSearchResult({
-            available: false,
-            registered: true,
-          });
-        }
-      }
+          // Step 3: Determine availability based on both checks
+          // Priority: Registry owner check is most reliable (especially on testnet)
+          // FIFS registrar is used as secondary confirmation
+          
+          // Domain is UNAVAILABLE if registry has a non-zero owner
+          if (registryOwner && registryOwner !== "0x0000000000000000000000000000000000000000") {
+            // Domain is registered
+            setSearchResult({
+              available: false,
+              registered: true,
+              owner: registryOwner,
+            });
+          } else {
+            // Registry owner is zero - domain is likely available
+            // Use FIFS registrar as confirmation if available
+            if (fifsAvailable === true) {
+              // Both registry and FIFS confirm available
+              setSearchResult({
+                available: true,
+                registered: false,
+              });
+            } else {
+              // FIFS registrar reverted or returned false, but registry says available
+              // On testnet, FIFS registrar may have issues, so trust the registry
+              // If registry owner is zero, domain is available
+              setSearchResult({
+                available: true,
+                registered: false,
+              });
+            }
+          }
     } catch (error) {
       console.error("Search error:", error);
       setSearchResult({

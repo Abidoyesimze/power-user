@@ -321,21 +321,28 @@ export default function RegisterTab() {
         </div>
 
         {/* Total Price Display */}
-        {totalPrice > BigInt(0) && (
-          <div className="mt-6 p-4 bg-purple-900/20 border border-purple-500/30 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-400">Total Registration Cost</p>
-                <p className="text-2xl font-bold text-purple-400">
-                  {isCalculatingTotal ? "Calculating..." : formatRIF(totalPrice)}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  Paid in RIF tokens • Official RNS pricing
-                </p>
-              </div>
+        <div className="mt-6 p-4 bg-purple-900/20 border border-purple-500/30 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-400">Total Registration Cost</p>
+              <p className="text-2xl font-bold text-purple-400">
+                {isCalculatingTotal 
+                  ? "Calculating..." 
+                  : totalPrice > BigInt(0)
+                  ? formatRIF(totalPrice)
+                  : domains.some(d => d.name.trim() && d.isChecking)
+                  ? "Checking availability..."
+                  : domains.some(d => d.name.trim() && d.isAvailable === undefined)
+                  ? "Enter domain names"
+                  : "0 RIF"
+                }
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Paid in RIF tokens • Official RNS pricing
+              </p>
             </div>
           </div>
-        )}
+        </div>
 
         <div className="flex gap-4 mt-6">
           <button

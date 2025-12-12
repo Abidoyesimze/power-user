@@ -17,7 +17,7 @@ interface DomainStatus {
 export default function RegisterTab() {
   const [domains, setDomains] = useState<DomainStatus[]>([{ name: "", duration: "1" }]);
   const { bulkRegister, isConnected, isLoading, address, hash, isConfirmed, reset, checkAvailability, calculateRegistrationCost } = useRNSBulkManager();
-  const { refetch: refetchDomains } = useUserDomains();
+  const { refetch: refetchDomains, domains: userDomains } = useUserDomains();
   const [isProcessing, setIsProcessing] = useState(false);
   const [totalPrice, setTotalPrice] = useState<bigint>(BigInt(0));
   const [isCalculatingTotal, setIsCalculatingTotal] = useState(false);
@@ -49,7 +49,13 @@ export default function RegisterTab() {
   };
   
   const calculatePrices = async () => {
-    const validDomains = domains.filter(d => d.name.trim() && d.isAvailable !== false);
+    // Only calculate prices for domains that are available (not unavailable, not still checking)
+    const validDomains = domains.filter(d => 
+      d.name.trim() && 
+      d.isAvailable === true && // Only calculate for confirmed available domains
+      !d.isChecking // Don't calculate while still checking
+    );
+    
     if (validDomains.length === 0) {
       setTotalPrice(BigInt(0));
       return;
@@ -62,10 +68,6 @@ export default function RegisterTab() {
       
       const total = await calculateRegistrationCost(names, durations);
       setTotalPrice(total);
-      
-      // Update individual prices
-      // Note: We can't get individual prices easily, so we'll show total only
-      // The official RNS manager shows individual prices, but that requires calling price() for each domain
     } catch (error) {
       console.error("Error calculating prices:", error);
       setTotalPrice(BigInt(0));
@@ -85,8 +87,9 @@ export default function RegisterTab() {
 
   const checkDomainAvailability = async (index: number, name: string) => {
     const normalizedName = name.toLowerCase().trim();
+    const normalizedNameWithRsk = normalizedName.endsWith('.rsk') ? normalizedName : `${normalizedName}.rsk`;
     
-    // If this domain was recently registered, mark it as unavailable immediately
+    // Step 1: Check if this domain was recently registered
     if (recentlyRegistered.has(normalizedName)) {
       setDomains(prev => {
         const updated = [...prev];
@@ -96,6 +99,22 @@ export default function RegisterTab() {
       return;
     }
     
+    // Step 2: Check if domain is in user's registered domains list (same as NameSearch)
+    const isInUserDomains = userDomains.some(
+      d => d.name.toLowerCase() === normalizedNameWithRsk.toLowerCase()
+    );
+    
+    if (isInUserDomains) {
+      // Domain is already registered by this user
+      setDomains(prev => {
+        const updated = [...prev];
+        updated[index] = { ...updated[index], isAvailable: false, isChecking: false };
+        return updated;
+      });
+      return;
+    }
+    
+    // Step 3: Check availability using the hook (which checks FIFS registrar and registry)
     try {
       setDomains(prev => {
         const updated = [...prev];
@@ -114,6 +133,8 @@ export default function RegisterTab() {
       // Recalculate prices after availability check
       if (available) {
         calculatePrices();
+      } else {
+        setTotalPrice(BigInt(0)); // Clear price if domain is unavailable
       }
     } catch (error) {
       console.error(`Error checking availability for ${name}:`, error);

@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { usePublicClient } from "wagmi";
+import { usePublicClient, useAccount } from "wagmi";
 import { RNS_BULK_MANAGER_ADDRESS, RNS_BULK_MANAGER_ABI } from "@/lib/abi";
 import { namehash } from "viem";
+import { useUserDomains } from "@/lib/hooks/useDomains";
 
 export default function NameSearch() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -15,6 +16,8 @@ export default function NameSearch() {
     expiry?: string;
   } | null>(null);
   const publicClient = usePublicClient();
+  const { address } = useAccount();
+  const { domains: userDomains } = useUserDomains();
 
   const checkNameAvailability = async () => {
     if (!searchTerm) return;
@@ -34,6 +37,25 @@ export default function NameSearch() {
       // RNS Registry address on testnet
       const RNS_REGISTRY = "0x7d284aaac6e925aad802a53c0c69efe3764597b8" as const;
       const node = namehash(normalizedName);
+      
+      // Step 0: FIRST check if domain is in user's registered domains list
+      // This is the most reliable check for domains registered through our platform
+      const isInUserDomains = userDomains.some(
+        d => d.name.toLowerCase() === normalizedName.toLowerCase()
+      );
+      
+      if (isInUserDomains) {
+        // Domain is definitely registered (in user's list)
+        const userDomain = userDomains.find(
+          d => d.name.toLowerCase() === normalizedName.toLowerCase()
+        );
+        setSearchResult({
+          available: false,
+          registered: true,
+          owner: userDomain?.owner || address,
+        });
+        return;
+      }
       
       // Strategy: Check BOTH FIFS registrar AND registry owner
       // A domain is unavailable if:

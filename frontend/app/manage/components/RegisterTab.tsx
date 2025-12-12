@@ -189,6 +189,15 @@ export default function RegisterTab() {
       }
     } catch (error) {
       console.error(`Error checking availability for ${name}:`, error);
+      
+      // Show user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes("revert") || errorMessage.includes("VM Exception")) {
+        toast.error(`${name}.rsk appears to be unavailable. Please check the domain name.`, { autoClose: 4000 });
+      } else {
+        toast.error(`Failed to check availability for ${name}. Please try again.`, { autoClose: 4000 });
+      }
+      
       setDomains(prev => {
         const updated = [...prev];
         updated[index] = { ...updated[index], isChecking: false, isAvailable: undefined };

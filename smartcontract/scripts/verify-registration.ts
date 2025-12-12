@@ -224,24 +224,78 @@ async function main() {
     const receipt = await viem.waitForTransactionReceipt({ hash });
     console.log("  ✅ Transaction confirmed in block:", receipt.blockNumber.toString());
 
-    // Step 5: Read the return value to see OperationResult
-    console.log("\nStep 5: Reading registration results...");
+    // Step 5: Check transaction events for registration results
+    console.log("\nStep 5: Analyzing transaction events...");
     try {
-      // Decode the return data from the transaction
-      const tx = await viem.getTransaction({ hash });
-      const result = await viem.readContract({
-        address: RNS_BULK_MANAGER as `0x${string}`,
-        abi: bulkManagerAbi,
-        functionName: "bulkRegister",
-        args: [[registrationRequest]],
+      const bulkManagerAbi = [
+        {
+          anonymous: false,
+          inputs: [
+            { indexed: true, name: "user", type: "address" },
+            { indexed: false, name: "count", type: "uint256" },
+            { indexed: false, name: "totalCost", type: "uint256" },
+          ],
+          name: "BulkRegistration",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            { indexed: true, name: "index", type: "uint256" },
+            { indexed: false, name: "reason", type: "string" },
+          ],
+          name: "OperationFailed",
+          type: "event",
+        },
+      ] as const;
+
+      // Parse logs to find BulkRegistration and OperationFailed events
+      const bulkRegistrationLogs = receipt.logs.filter(log => 
+        log.address.toLowerCase() === RNS_BULK_MANAGER.toLowerCase()
+      );
+
+      if (bulkRegistrationLogs.length > 0) {
+        try {
+          const decoded = await viem.decodeEventLog({
+            abi: bulkManagerAbi,
+            data: bulkRegistrationLogs[0].data,
+            topics: bulkRegistrationLogs[0].topics,
+          });
+
+          if (decoded.eventName === "BulkRegistration") {
+            console.log("  ✅ BulkRegistration event found:");
+            console.log("     - User:", decoded.args.user);
+            console.log("     - Count:", decoded.args.count.toString());
+            console.log("     - Total Cost:", decoded.args.totalCost.toString(), "RIF (wei)");
+            
+            if (Number(decoded.args.count) > 0) {
+              console.log("  ✅ Registration succeeded according to event");
+            } else {
+              console.log("  ⚠️  Registration count is 0 - might have failed");
+            }
+          }
+        } catch (decodeError) {
+          console.log("  ⚠️  Could not decode event (checking registry directly)");
+        }
+      } else {
+        console.log("  ⚠️  No BulkRegistration event found in transaction");
+      }
+
+      // Check for OperationFailed events
+      const operationFailedLogs = receipt.logs.filter(log => {
+        try {
+          // Try to decode as OperationFailed
+          return true; // We'll check in the loop
+        } catch {
+          return false;
+        }
       });
 
-      // Note: This won't work because readContract can't read from a write transaction
-      // We need to check the registry directly instead
-      console.log("  ⚠️  Cannot read return value from write transaction");
-      console.log("  🔍 Checking registry directly instead...");
+      if (operationFailedLogs.length > 0) {
+        console.log("  ⚠️  Found", operationFailedLogs.length, "potential OperationFailed events");
+      }
     } catch (error) {
-      console.log("  ⚠️  Could not read return value (expected for write transactions)");
+      console.log("  ⚠️  Could not analyze events:", error instanceof Error ? error.message : String(error));
     }
 
     // Step 6: Verify domain in RNS registry

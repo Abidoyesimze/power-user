@@ -20,7 +20,12 @@ const rskTestnet = defineChain({
   },
   rpcUrls: {
     default: {
-      http: [process.env.NEXT_PUBLIC_RPC_URL || "https://rpc.testnet.rootstock.io/eB6SwV0sOgFuotmD35JzhuCqpnYf8W-T"],
+      // Use RPC URL from env or fallback to one that supports eth_getLogs
+      // The public-node.testnet.rsk.co does NOT support eth_getLogs
+      http: [
+        process.env.NEXT_PUBLIC_RPC_URL || 
+        "https://rpc.testnet.rootstock.io/eB6SwV0sOgFuotmD35JzhuCqpnYf8W-T"
+      ],
     },
   },
   blockExplorers: {
@@ -34,11 +39,13 @@ const rskTestnet = defineChain({
 
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "demo";
 
+// getDefaultConfig has incomplete type definitions for custom chains
 const config = getDefaultConfig({
   appName: "RNS Bulk Manager",
   projectId,
   chains: [rskTestnet],
   ssr: true,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } as any);
 
 const queryClient = new QueryClient();

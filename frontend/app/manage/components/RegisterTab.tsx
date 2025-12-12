@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useRNSBulkManager } from "@/lib/hooks/useContract";
-import { useAccount } from "wagmi";
 import { toast } from "react-toastify";
 import { useUserDomains } from "@/lib/hooks/useDomains";
 
@@ -11,14 +10,19 @@ interface DomainStatus {
   duration: string;
   isAvailable?: boolean;
   isChecking?: boolean;
+  price?: bigint;
+  isCalculatingPrice?: boolean;
 }
 
 export default function RegisterTab() {
   const [domains, setDomains] = useState<DomainStatus[]>([{ name: "", duration: "1" }]);
-  const { bulkRegister, isConnected, isLoading, address, hash, isConfirming, isConfirmed, reset, checkAvailability } = useRNSBulkManager();
-  const { refetch: refetchDomains } = useUserDomains();
+  const { bulkRegister, isConnected, isLoading, address, hash, isConfirmed, reset, checkAvailability, calculateRegistrationCost } = useRNSBulkManager();
+  const { refetch: refetchDomains, domains: userDomains } = useUserDomains();
   const [isProcessing, setIsProcessing] = useState(false);
-  const [checkingDomains, setCheckingDomains] = useState(false);
+  const [totalPrice, setTotalPrice] = useState<bigint>(BigInt(0));
+  const [isCalculatingTotal, setIsCalculatingTotal] = useState(false);
+  // Track recently registered domains to mark them as unavailable
+  const [recentlyRegistered, setRecentlyRegistered] = useState<Set<string>>(new Set());
 
   const addDomain = () => {
     setDomains([...domains, { name: "", duration: "1" }]);
@@ -37,9 +41,121 @@ export default function RegisterTab() {
     if (field === "name" && value.trim()) {
       checkDomainAvailability(index, value);
     }
+    
+    // Recalculate prices when name or duration changes
+    if ((field === "name" || field === "duration") && value.trim()) {
+      calculatePrices();
+    }
+  };
+  
+  const calculatePrices = async () => {
+    // Only calculate prices for domains that are confirmed available
+    // Add comprehensive checks to prevent calculating for unavailable domains
+    const validDomains = domains.filter(d => {
+      const name = d.name.trim();
+      if (!name) return false;
+      
+      // Must be explicitly marked as available
+      if (d.isAvailable !== true) return false;
+      
+      // Must not be currently checking
+      if (d.isChecking) return false;
+      
+      // Must not be in user's registered domains list
+      const normalizedName = name.toLowerCase();
+      const isInUserDomains = userDomains.some(
+        ud => ud.name.toLowerCase() === `${normalizedName}.rsk` || ud.name.toLowerCase() === normalizedName
+      );
+      if (isInUserDomains) return false;
+      
+      // Must not be recently registered
+      if (recentlyRegistered.has(normalizedName)) return false;
+      
+      return true;
+    });
+    
+    if (validDomains.length === 0) {
+      setTotalPrice(BigInt(0));
+      return;
+    }
+    
+    setIsCalculatingTotal(true);
+    try {
+      const names = validDomains.map(d => d.name.trim());
+      const durations = validDomains.map(d => BigInt(parseInt(d.duration) * 365 * 24 * 60 * 60));
+      
+      // Final validation before calling contract
+      if (names.length === 0 || names.some(n => !n || n.length === 0)) {
+        setTotalPrice(BigInt(0));
+        return;
+      }
+      
+      // Call the contract to calculate price
+      const total = await calculateRegistrationCost(names, durations);
+      setTotalPrice(total);
+    } catch (error) {
+      console.error("Error calculating prices:", error);
+      
+      // Show user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes("revert") || errorMessage.includes("VM Exception")) {
+        // Domain is likely not available (contract reverted)
+        const unavailableDomains = validDomains.map(d => d.name).join(", ");
+        toast.error(
+          `Cannot calculate price: ${unavailableDomains} ${validDomains.length > 1 ? 'are' : 'is'} already registered or unavailable.`,
+          { autoClose: 5000 }
+        );
+      } else {
+        // Other errors (network, RPC, etc.)
+        toast.error("Failed to calculate registration price. Please try again.", { autoClose: 5000 });
+      }
+      
+      // Set price to 0 on error
+      setTotalPrice(BigInt(0));
+    } finally {
+      setIsCalculatingTotal(false);
+    }
+  };
+  
+  // Format RIF token amount (18 decimals)
+  const formatRIF = (amount: bigint): string => {
+    const rifAmount = Number(amount) / 1e18;
+    if (rifAmount < 0.01) {
+      return "< 0.01 RIF";
+    }
+    return `${rifAmount.toFixed(4)} RIF`;
   };
 
   const checkDomainAvailability = async (index: number, name: string) => {
+    const normalizedName = name.toLowerCase().trim();
+    const normalizedNameWithRsk = normalizedName.endsWith('.rsk') ? normalizedName : `${normalizedName}.rsk`;
+    
+    // Step 1: Check if this domain was recently registered
+    if (recentlyRegistered.has(normalizedName)) {
+      setDomains(prev => {
+        const updated = [...prev];
+        updated[index] = { ...updated[index], isAvailable: false, isChecking: false };
+        return updated;
+      });
+      return;
+    }
+    
+    // Step 2: Check if domain is in user's registered domains list (same as NameSearch)
+    const isInUserDomains = userDomains.some(
+      d => d.name.toLowerCase() === normalizedNameWithRsk.toLowerCase()
+    );
+    
+    if (isInUserDomains) {
+      // Domain is already registered by this user
+      setDomains(prev => {
+        const updated = [...prev];
+        updated[index] = { ...updated[index], isAvailable: false, isChecking: false };
+        return updated;
+      });
+      return;
+    }
+    
+    // Step 3: Check availability using the hook (which checks FIFS registrar and registry)
     try {
       setDomains(prev => {
         const updated = [...prev];
@@ -54,8 +170,34 @@ export default function RegisterTab() {
         updated[index] = { ...updated[index], isAvailable: available, isChecking: false };
         return updated;
       });
+      
+      // Recalculate prices after availability check
+      if (available) {
+        // Small delay to ensure state is updated before calculating prices
+        // This prevents race conditions where price calculation runs before availability is confirmed
+        setTimeout(() => {
+          // Double-check that domain is still available before calculating price
+          const currentDomain = domains[index];
+          if (currentDomain && currentDomain.isAvailable === true && !currentDomain.isChecking) {
+            calculatePrices();
+          } else {
+            setTotalPrice(BigInt(0));
+          }
+        }, 300);
+      } else {
+        setTotalPrice(BigInt(0)); // Clear price if domain is unavailable
+      }
     } catch (error) {
       console.error(`Error checking availability for ${name}:`, error);
+      
+      // Show user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes("revert") || errorMessage.includes("VM Exception")) {
+        toast.error(`${name}.rsk appears to be unavailable. Please check the domain name.`, { autoClose: 4000 });
+      } else {
+        toast.error(`Failed to check availability for ${name}. Please try again.`, { autoClose: 4000 });
+      }
+      
       setDomains(prev => {
         const updated = [...prev];
         updated[index] = { ...updated[index], isChecking: false, isAvailable: undefined };
@@ -63,19 +205,73 @@ export default function RegisterTab() {
       });
     }
   };
+  
+  // Calculate prices when domains change (only for available domains)
+  useEffect(() => {
+    // Only calculate if we have at least one confirmed available domain
+    const hasAvailableDomain = domains.some(d => d.name.trim() && d.isAvailable === true && !d.isChecking);
+    
+    if (!hasAvailableDomain) {
+      setTotalPrice(BigInt(0));
+      return;
+    }
+    
+    const timer = setTimeout(() => {
+      calculatePrices();
+    }, 500); // Debounce price calculation
+    
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [domains.map(d => `${d.name}-${d.duration}-${d.isAvailable}`).join(',')]);
 
   // Show success message when transaction is confirmed
   useEffect(() => {
     if (isConfirmed && hash) {
-      toast.success(`Successfully registered ${domains.length} domain${domains.length > 1 ? 's' : ''}! The transaction has been confirmed.`);
+      // Store the registered domain names before clearing the form
+      const registeredNames = domains
+        .filter(d => d.name.trim())
+        .map(d => d.name.toLowerCase().trim());
+      
+      // Add to recently registered set
+      setRecentlyRegistered(prev => {
+        const newSet = new Set(prev);
+        registeredNames.forEach(name => newSet.add(name));
+        return newSet;
+      });
+      
+      const domainList = registeredNames.map(n => `${n}.rsk`).join(", ");
+      toast.success(
+        `Successfully registered ${domains.length} domain${domains.length > 1 ? 's' : ''}! The transaction has been confirmed.`,
+        { autoClose: 6000 }
+      );
+      
+      // Show additional info about official RNS visibility
+      setTimeout(() => {
+        toast.info(
+          `Your domains (${domainList}) are registered through the official RNS FIFS registrar (same as the RIF app). They should appear in the official RIF app shortly. Note: On testnet, there may be a delay before domains appear in the RIF app due to registry update timing.`,
+          { autoClose: 12000 }
+        );
+      }, 2000);
+      
       // Clear the form
       setDomains([{ name: "", duration: "1" }]);
+      
       // Refresh domain list
       refetchDomains();
+      
       // Reset the hook state
       reset();
+      
+      // After 30 seconds, remove from recently registered (blockchain state should be updated by then)
+      setTimeout(() => {
+        setRecentlyRegistered(prev => {
+          const newSet = new Set(prev);
+          registeredNames.forEach(name => newSet.delete(name));
+          return newSet;
+        });
+      }, 30000); // 30 seconds
     }
-  }, [isConfirmed, hash, domains.length, reset, refetchDomains]);
+  }, [isConfirmed, hash, domains, reset, refetchDomains]);
 
   const handleRegister = async () => {
     if (!isConnected || !address) {
@@ -204,6 +400,30 @@ export default function RegisterTab() {
           ))}
         </div>
 
+        {/* Total Price Display */}
+        <div className="mt-6 p-4 bg-purple-900/20 border border-purple-500/30 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-400">Total Registration Cost</p>
+              <p className="text-2xl font-bold text-purple-400">
+                {isCalculatingTotal 
+                  ? "Calculating..." 
+                  : totalPrice > BigInt(0)
+                  ? formatRIF(totalPrice)
+                  : domains.some(d => d.name.trim() && d.isChecking)
+                  ? "Checking availability..."
+                  : domains.some(d => d.name.trim() && d.isAvailable === undefined)
+                  ? "Enter domain names"
+                  : "0 RIF"
+                }
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Paid in RIF tokens • Official RNS pricing
+              </p>
+            </div>
+          </div>
+        </div>
+
         <div className="flex gap-4 mt-6">
           <button
             onClick={addDomain}
@@ -217,7 +437,8 @@ export default function RegisterTab() {
               isProcessing || 
               isLoading || 
               !isConnected || 
-              domains.some(d => d.isAvailable === false)
+              domains.some(d => d.isAvailable === false) ||
+              domains.every(d => !d.name.trim())
             }
             className="px-6 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-1"
           >
@@ -225,7 +446,9 @@ export default function RegisterTab() {
               ? "Processing..." 
               : domains.some(d => d.isAvailable === false)
               ? "Some domains are unavailable"
-              : `Register ${domains.length} Domain${domains.length > 1 ? "s" : ""}`
+              : domains.every(d => !d.name.trim())
+              ? "Enter domain names"
+              : `Register ${domains.filter(d => d.name.trim()).length} Domain${domains.filter(d => d.name.trim()).length > 1 ? "s" : ""}`
             }
           </button>
         </div>

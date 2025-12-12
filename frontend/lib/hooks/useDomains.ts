@@ -44,6 +44,8 @@ export function useUserDomains() {
       const fromBlock = currentBlock > BigInt(2000) ? currentBlock - BigInt(2000) : BigInt(0);
 
       // Query BulkRegistration events from our contract
+      // Note: This requires an RPC endpoint that supports eth_getLogs
+      // The default RPC URL in providers.tsx should support this
       const bulkRegistrationLogs = await publicClient.getLogs({
         address: RNS_BULK_MANAGER,
         event: {
@@ -54,9 +56,11 @@ export function useUserDomains() {
             { indexed: false, name: "count", type: "uint256" },
             { indexed: false, name: "totalCost", type: "uint256" },
           ],
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any,
         args: {
           user: address,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any,
         fromBlock,
         toBlock: "latest",
@@ -83,6 +87,7 @@ export function useUserDomains() {
           console.log("Decoded function:", decoded.functionName);
           
           if (decoded.functionName === "bulkRegister" && decoded.args) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const requests = decoded.args[0] as any[]; // First parameter is the array of requests
             console.log("Number of requests:", requests?.length);
             
@@ -174,14 +179,15 @@ export function useUserDomains() {
       if (uniqueDomains.size === 0) {
         console.log("No domains found in the last 2000 blocks. If you just registered a domain, it may take a moment to appear, or you can manually refresh.");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching domains:", err);
       
       let errorMsg = "Failed to load domains.";
-      if (err?.message?.includes("Invalid params") || err?.message?.includes("block range")) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      if (errorMessage.includes("Invalid params") || errorMessage.includes("block range")) {
         errorMsg = "RPC block range limit reached. Try a smaller date range.";
-      } else if (err?.message?.includes("does not exist")) {
-        errorMsg = "RPC endpoint doesn't support event queries. Try refreshing or check your connection.";
+      } else if (errorMessage.includes("does not exist") || errorMessage.includes("eth_getLogs")) {
+        errorMsg = "RPC endpoint doesn't support eth_getLogs. Please set NEXT_PUBLIC_RPC_URL in .env.local to a compatible endpoint (e.g., https://rpc.testnet.rootstock.io/eB6SwV0sOgFuotmD35JzhuCqpnYf8W-T)";
       }
       
       setError(errorMsg);

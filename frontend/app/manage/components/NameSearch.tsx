@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { usePublicClient } from "wagmi";
+import { usePublicClient, useAccount } from "wagmi";
 import { RNS_BULK_MANAGER_ADDRESS, RNS_BULK_MANAGER_ABI } from "@/lib/abi";
 import { namehash } from "viem";
+import { useUserDomains } from "@/lib/hooks/useDomains";
 
 export default function NameSearch() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -15,6 +16,8 @@ export default function NameSearch() {
     expiry?: string;
   } | null>(null);
   const publicClient = usePublicClient();
+  const { address } = useAccount();
+  const { domains: userDomains } = useUserDomains();
 
   const checkNameAvailability = async () => {
     if (!searchTerm) return;
@@ -23,7 +26,7 @@ export default function NameSearch() {
     setSearchResult(null);
 
     try {
-      // Normalize the domain name
+      // Normalize the domain name (without .rsk for FIFS registrar)
       const domainName = searchTerm.toLowerCase().trim().replace(".rsk", "");
       const normalizedName = `${domainName}.rsk`;
 
@@ -33,36 +36,45 @@ export default function NameSearch() {
 
       // RNS Registry address on testnet
       const RNS_REGISTRY = "0x7d284aaac6e925aad802a53c0c69efe3764597b8" as const;
-      
-      // Check domain ownership directly from RNS Registry (most reliable method)
       const node = namehash(normalizedName);
       
-      const owner = await publicClient.readContract({
-        address: RNS_REGISTRY,
-        abi: [
-          {
-            inputs: [{ name: "node", type: "bytes32" }],
-            name: "owner",
-            outputs: [{ name: "", type: "address" }],
-            stateMutability: "view",
-            type: "function",
-          },
-        ],
-        functionName: "owner",
-        args: [node],
-      });
+      // Step 0: FIRST check if domain is in user's registered domains list
+      // This is the most reliable check for domains registered through our platform
+      const isInUserDomains = userDomains.some(
+        d => d.name.toLowerCase() === normalizedName.toLowerCase()
+      );
+      
+      if (isInUserDomains) {
+        // Domain is definitely registered (in user's list)
+        const userDomain = userDomains.find(
+          d => d.name.toLowerCase() === normalizedName.toLowerCase()
+        );
+        setSearchResult({
+          available: false,
+          registered: true,
+          owner: userDomain?.owner || address,
+        });
+        return;
+      }
+      
+      // Strategy: Check BOTH FIFS registrar AND registry owner
+      // A domain is unavailable if:
+      // 1. FIFS registrar says it's not available, OR
+      // 2. Registry owner is not zero address
+      // This ensures we catch all registered domains
+      
+      let fifsAvailable: boolean | null = null;
+      let registryOwner: string | null = null;
+      
+      // Step 1: Check FIFS registrar availability
+      try {
+        const fifsRegistrarAddress = await publicClient.readContract({
+          address: RNS_BULK_MANAGER_ADDRESS,
+          abi: RNS_BULK_MANAGER_ABI,
+          functionName: "fifsRegistrar",
+        });
 
-      // If owner is zero address, domain is available
-      // If owner is not zero address, domain is registered
-      if (owner === "0x0000000000000000000000000000000000000000" || !owner) {
-        // Double-check with FIFS registrar for additional validation
         try {
-          const fifsRegistrarAddress = await publicClient.readContract({
-            address: RNS_BULK_MANAGER_ADDRESS,
-            abi: RNS_BULK_MANAGER_ABI,
-            functionName: "fifsRegistrar",
-          });
-
           const available = await publicClient.readContract({
             address: fifsRegistrarAddress as `0x${string}`,
             abi: [
@@ -77,33 +89,71 @@ export default function NameSearch() {
             functionName: "available",
             args: [domainName],
           });
-
-          if (available) {
-            setSearchResult({
-              available: true,
-              registered: false,
-            });
-          } else {
-            // Registrar says not available but registry shows zero - might be in process
-            setSearchResult({
-              available: false,
-              registered: true,
-            });
-          }
-        } catch {
-          // If FIFS check fails, trust the registry check
+          fifsAvailable = available as boolean;
+        } catch (fifsCallError) {
+          // If FIFS registrar call reverts, it might mean the domain is invalid or taken
+          // We'll check the registry to be sure
+          console.warn("FIFS registrar available() call reverted:", fifsCallError);
+          fifsAvailable = null;
+        }
+      } catch (fifsError) {
+        console.warn("Could not get FIFS registrar address:", fifsError);
+      }
+      
+      // Step 2: Check registry owner (ALWAYS check this, even if FIFS check succeeded)
+      try {
+        const owner = await publicClient.readContract({
+          address: RNS_REGISTRY,
+          abi: [
+            {
+              inputs: [{ name: "node", type: "bytes32" }],
+              name: "owner",
+              outputs: [{ name: "", type: "address" }],
+              stateMutability: "view",
+              type: "function",
+            },
+          ],
+          functionName: "owner",
+          args: [node],
+        });
+        registryOwner = owner as string;
+      } catch (registryError) {
+        console.error("Registry owner check failed:", registryError);
+      }
+      
+      // Step 3: Determine availability based on both checks
+      // Domain is UNAVAILABLE if:
+      // - FIFS says it's not available (false), OR
+      // - Registry has a non-zero owner
+      const isRegistered = 
+        fifsAvailable === false || 
+        (registryOwner && registryOwner !== "0x0000000000000000000000000000000000000000");
+      
+      if (isRegistered) {
+        // Domain is registered
+        setSearchResult({
+          available: false,
+          registered: true,
+          owner: registryOwner && registryOwner !== "0x0000000000000000000000000000000000000000"
+            ? registryOwner
+            : undefined,
+        });
+      } else {
+        // Domain appears to be available
+        // Only show as available if FIFS registrar explicitly says so OR registry owner is zero
+        if (fifsAvailable === true || (registryOwner === "0x0000000000000000000000000000000000000000" || !registryOwner)) {
           setSearchResult({
             available: true,
             registered: false,
           });
+        } else {
+          // Uncertain state - FIFS call reverted but registry shows zero
+          // Treat as unavailable to be safe
+          setSearchResult({
+            available: false,
+            registered: true,
+          });
         }
-      } else {
-        // Domain is registered - owner exists
-        setSearchResult({
-          available: false,
-          registered: true,
-          owner: owner as string,
-        });
       }
     } catch (error) {
       console.error("Search error:", error);
@@ -128,7 +178,7 @@ export default function NameSearch() {
         Check Domain Availability
       </h2>
       <p className="text-gray-400 mb-6">
-        Search for .rsk domains and see if they're available for registration
+        Search for .rsk domains and see if they&apos;re available for registration
       </p>
 
       <div className="flex gap-4">

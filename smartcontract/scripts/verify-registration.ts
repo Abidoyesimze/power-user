@@ -301,9 +301,17 @@ async function main() {
       );
 
       console.log("  📋 Found", bulkManagerLogs.length, "logs from BulkManager contract");
+      console.log("  📋 Total logs in transaction:", receipt.logs.length);
+
+      // Also check for RIF token transfer events (which should happen if registration succeeds)
+      const rifTokenLogs = receipt.logs.filter(log => 
+        log.address.toLowerCase() === RIF_TOKEN.toLowerCase()
+      );
+      console.log("  📋 Found", rifTokenLogs.length, "logs from RIF Token contract");
 
       let bulkRegistrationFound = false;
       let operationFailedCount = 0;
+      const allDecodedEvents: Array<{ name: string; args: unknown }> = [];
 
       for (const log of bulkManagerLogs) {
         try {
@@ -313,6 +321,8 @@ async function main() {
             data: log.data,
             topics: log.topics,
           });
+
+          allDecodedEvents.push({ name: decoded.eventName, args: decoded.args });
 
           if (decoded.eventName === "BulkRegistration") {
             bulkRegistrationFound = true;
@@ -333,11 +343,23 @@ async function main() {
             console.log("  ❌ OperationFailed event found:");
             console.log("     - Index:", decoded.args.index.toString());
             console.log("     - Reason:", decoded.args.reason);
+          } else {
+            console.log("  ℹ️  Other event found:", decoded.eventName);
           }
         } catch (decodeError) {
-          // Not a BulkRegistration or OperationFailed event, skip
-          continue;
+          // Try to decode with full ABI to see what event it is
+          console.log("  ⚠️  Could not decode log with BulkManager ABI");
+          console.log("     - Log topics:", log.topics.length);
+          console.log("     - First topic (event signature):", log.topics[0]);
         }
+      }
+
+      // Show all decoded events
+      if (allDecodedEvents.length > 0) {
+        console.log("\n  📊 All decoded events from BulkManager:");
+        allDecodedEvents.forEach((event, idx) => {
+          console.log(`     ${idx + 1}. ${event.name}`);
+        });
       }
 
       if (!bulkRegistrationFound) {
@@ -352,10 +374,9 @@ async function main() {
       console.log("  ⚠️  Could not analyze events:", error instanceof Error ? error.message : String(error));
     }
 
-    // Step 6: Verify domain in RNS registry
+    // Step 6: Verify domain in RNS registry (with retries)
     console.log("\nStep 6: Verifying domain in RNS registry...");
-    await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds for registry update
-
+    
     const registryAbi = [
       {
         inputs: [{ name: "node", type: "bytes32" }],
@@ -369,29 +390,55 @@ async function main() {
     const domainNode = namehash(testDomainFull);
     console.log("  🔑 Domain node (namehash):", domainNode);
 
-    const registryOwner = await publicClient.readContract({
-      address: RNS_REGISTRY as `0x${string}`,
-      abi: registryAbi,
-      functionName: "owner",
-      args: [domainNode],
-    });
+    // Retry checking registry owner (testnet may have delays)
+    const maxRetries = 5;
+    const retryDelay = 5000; // 5 seconds between retries
+    let registryOwner: string | null = null;
+    let retryCount = 0;
 
-    console.log("  👤 Registry owner:", registryOwner);
+    while (retryCount < maxRetries) {
+      if (retryCount > 0) {
+        console.log(`  ⏳ Retry ${retryCount}/${maxRetries - 1} - Waiting ${retryDelay / 1000}s for registry update...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
 
-    if (registryOwner.toLowerCase() === deployerAddress.toLowerCase()) {
-      console.log("  ✅ SUCCESS: Domain is registered in RNS registry!");
-      console.log("  ✅ Owner matches deployer address");
-      console.log("  ✅ Domain should appear in official RIF app");
-    } else if (registryOwner === "0x0000000000000000000000000000000000000000") {
-      console.log("  ⚠️  WARNING: Domain owner is zero address");
-      console.log("  ⚠️  This might indicate:");
-      console.log("     - Registration succeeded but registry not updated yet (testnet delay)");
-      console.log("     - FIFS registrar didn't update the registry");
-      console.log("     - Testnet FIFS registrar issue");
-    } else {
-      console.log("  ❌ ERROR: Domain owner doesn't match!");
-      console.log("  ❌ Expected:", deployerAddress);
-      console.log("  ❌ Got:", registryOwner);
+      try {
+        registryOwner = await publicClient.readContract({
+          address: RNS_REGISTRY as `0x${string}`,
+          abi: registryAbi,
+          functionName: "owner",
+          args: [domainNode],
+        }) as string;
+
+        console.log(`  👤 Registry owner (attempt ${retryCount + 1}):`, registryOwner);
+
+        if (registryOwner.toLowerCase() === deployerAddress.toLowerCase()) {
+          console.log("  ✅ SUCCESS: Domain is registered in RNS registry!");
+          console.log("  ✅ Owner matches deployer address");
+          console.log("  ✅ Domain should appear in official RIF app");
+          break; // Success, exit retry loop
+        } else if (registryOwner === "0x0000000000000000000000000000000000000000") {
+          if (retryCount < maxRetries - 1) {
+            console.log("  ⏳ Registry owner is still zero - will retry...");
+          } else {
+            console.log("  ⚠️  WARNING: Domain owner is still zero address after all retries");
+            console.log("  ⚠️  This might indicate:");
+            console.log("     - Registration succeeded but registry not updated yet (testnet delay)");
+            console.log("     - FIFS registrar didn't update the registry");
+            console.log("     - Testnet FIFS registrar issue");
+            console.log("  💡 Check the transaction on explorer to see if BulkRegistration event was emitted");
+          }
+        } else {
+          console.log("  ❌ ERROR: Domain owner doesn't match!");
+          console.log("  ❌ Expected:", deployerAddress);
+          console.log("  ❌ Got:", registryOwner);
+          break; // Different owner, exit retry loop
+        }
+      } catch (error) {
+        console.log(`  ⚠️  Error checking registry (attempt ${retryCount + 1}):`, error instanceof Error ? error.message : String(error));
+      }
+
+      retryCount++;
     }
 
     // Step 7: Check FIFS registrar availability

@@ -62,9 +62,12 @@ export default function RegisterTab() {
       if (d.isChecking) return false;
       
       // Must not be in user's registered domains list
-      const normalizedName = name.toLowerCase();
+      const normalizedName = name.toLowerCase().replace(/\.rsk$/i, '');
       const isInUserDomains = userDomains.some(
-        ud => ud.name.toLowerCase() === `${normalizedName}.rsk` || ud.name.toLowerCase() === normalizedName
+        ud => {
+          const udName = ud.name.toLowerCase().replace(/\.rsk$/i, '');
+          return udName === normalizedName;
+        }
       );
       if (isInUserDomains) return false;
       
@@ -81,7 +84,8 @@ export default function RegisterTab() {
     
     setIsCalculatingTotal(true);
     try {
-      const names = validDomains.map(d => d.name.trim());
+      // Strip .rsk suffix before sending to contract (FIFS registrar expects names without .rsk)
+      const names = validDomains.map(d => d.name.trim().replace(/\.rsk$/i, ''));
       const durations = validDomains.map(d => BigInt(parseInt(d.duration) * 365 * 24 * 60 * 60));
       
       // Final validation before calling contract
@@ -91,6 +95,7 @@ export default function RegisterTab() {
       }
       
       // Call the contract to calculate price
+      // Note: calculateRegistrationCost already strips .rsk, but we do it here too for safety
       const total = await calculateRegistrationCost(names, durations);
       setTotalPrice(total);
     } catch (error) {
@@ -101,6 +106,19 @@ export default function RegisterTab() {
       if (errorMessage.includes("revert") || errorMessage.includes("VM Exception")) {
         // Domain is likely not available (contract reverted)
         const unavailableDomains = validDomains.map(d => d.name).join(", ");
+        
+        // Mark these domains as unavailable in the UI
+        setDomains(prev => prev.map(d => {
+          const normalizedName = d.name.toLowerCase().trim().replace(/\.rsk$/i, '');
+          const isUnavailable = validDomains.some(vd => 
+            vd.name.toLowerCase().trim().replace(/\.rsk$/i, '') === normalizedName
+          );
+          if (isUnavailable) {
+            return { ...d, isAvailable: false, isChecking: false };
+          }
+          return d;
+        }));
+        
         toast.error(
           `Cannot calculate price: ${unavailableDomains} ${validDomains.length > 1 ? 'are' : 'is'} already registered or unavailable.`,
           { autoClose: 5000 }

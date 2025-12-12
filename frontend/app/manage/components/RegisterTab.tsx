@@ -50,11 +50,29 @@ export default function RegisterTab() {
   
   const calculatePrices = async () => {
     // Only calculate prices for domains that are confirmed available
-    const validDomains = domains.filter(d => 
-      d.name.trim() && 
-      d.isAvailable === true && // Only calculate for confirmed available domains
-      !d.isChecking // Don't calculate while still checking
-    );
+    // Add comprehensive checks to prevent calculating for unavailable domains
+    const validDomains = domains.filter(d => {
+      const name = d.name.trim();
+      if (!name) return false;
+      
+      // Must be explicitly marked as available
+      if (d.isAvailable !== true) return false;
+      
+      // Must not be currently checking
+      if (d.isChecking) return false;
+      
+      // Must not be in user's registered domains list
+      const normalizedName = name.toLowerCase();
+      const isInUserDomains = userDomains.some(
+        ud => ud.name.toLowerCase() === `${normalizedName}.rsk` || ud.name.toLowerCase() === normalizedName
+      );
+      if (isInUserDomains) return false;
+      
+      // Must not be recently registered
+      if (recentlyRegistered.has(normalizedName)) return false;
+      
+      return true;
+    });
     
     if (validDomains.length === 0) {
       setTotalPrice(BigInt(0));
@@ -66,18 +84,22 @@ export default function RegisterTab() {
       const names = validDomains.map(d => d.name.trim());
       const durations = validDomains.map(d => BigInt(parseInt(d.duration) * 365 * 24 * 60 * 60));
       
-      // Only calculate if we have valid domains
-      if (names.length === 0 || names.some(n => !n)) {
+      // Final validation before calling contract
+      if (names.length === 0 || names.some(n => !n || n.length === 0)) {
         setTotalPrice(BigInt(0));
         return;
       }
       
+      // Call the contract to calculate price
       const total = await calculateRegistrationCost(names, durations);
       setTotalPrice(total);
     } catch (error) {
       console.error("Error calculating prices:", error);
       // If price calculation fails (e.g., domain not available), set to 0
-      // This can happen if a domain becomes unavailable between availability check and price calculation
+      // This can happen if:
+      // 1. Domain becomes unavailable between availability check and price calculation
+      // 2. FIFS registrar's price() function reverts for unavailable domains
+      // 3. RPC/network issues
       setTotalPrice(BigInt(0));
     } finally {
       setIsCalculatingTotal(false);

@@ -132,7 +132,8 @@ export default function RegisterTab() {
     }, 500); // Debounce price calculation
     
     return () => clearTimeout(timer);
-  }, [domains]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [domains.map(d => `${d.name}-${d.duration}`).join(',')]);
 
   // Show success message when transaction is confirmed
   useEffect(() => {

@@ -17,6 +17,8 @@ export default function RegisterTab() {
   const { bulkRegister, isConnected, isLoading, address, hash, isConfirmed, reset, checkAvailability } = useRNSBulkManager();
   const { refetch: refetchDomains } = useUserDomains();
   const [isProcessing, setIsProcessing] = useState(false);
+  // Track recently registered domains to mark them as unavailable
+  const [recentlyRegistered, setRecentlyRegistered] = useState<Set<string>>(new Set());
 
   const addDomain = () => {
     setDomains([...domains, { name: "", duration: "1" }]);
@@ -38,6 +40,18 @@ export default function RegisterTab() {
   };
 
   const checkDomainAvailability = async (index: number, name: string) => {
+    const normalizedName = name.toLowerCase().trim();
+    
+    // If this domain was recently registered, mark it as unavailable immediately
+    if (recentlyRegistered.has(normalizedName)) {
+      setDomains(prev => {
+        const updated = [...prev];
+        updated[index] = { ...updated[index], isAvailable: false, isChecking: false };
+        return updated;
+      });
+      return;
+    }
+    
     try {
       setDomains(prev => {
         const updated = [...prev];
@@ -65,15 +79,39 @@ export default function RegisterTab() {
   // Show success message when transaction is confirmed
   useEffect(() => {
     if (isConfirmed && hash) {
+      // Store the registered domain names before clearing the form
+      const registeredNames = domains
+        .filter(d => d.name.trim())
+        .map(d => d.name.toLowerCase().trim());
+      
+      // Add to recently registered set
+      setRecentlyRegistered(prev => {
+        const newSet = new Set(prev);
+        registeredNames.forEach(name => newSet.add(name));
+        return newSet;
+      });
+      
       toast.success(`Successfully registered ${domains.length} domain${domains.length > 1 ? 's' : ''}! The transaction has been confirmed.`);
+      
       // Clear the form
       setDomains([{ name: "", duration: "1" }]);
+      
       // Refresh domain list
       refetchDomains();
+      
       // Reset the hook state
       reset();
+      
+      // After 30 seconds, remove from recently registered (blockchain state should be updated by then)
+      setTimeout(() => {
+        setRecentlyRegistered(prev => {
+          const newSet = new Set(prev);
+          registeredNames.forEach(name => newSet.delete(name));
+          return newSet;
+        });
+      }, 30000); // 30 seconds
     }
-  }, [isConfirmed, hash, domains.length, reset, refetchDomains]);
+  }, [isConfirmed, hash, domains, reset, refetchDomains]);
 
   const handleRegister = async () => {
     if (!isConnected || !address) {

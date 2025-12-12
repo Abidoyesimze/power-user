@@ -95,11 +95,22 @@ export default function RegisterTab() {
       setTotalPrice(total);
     } catch (error) {
       console.error("Error calculating prices:", error);
-      // If price calculation fails (e.g., domain not available), set to 0
-      // This can happen if:
-      // 1. Domain becomes unavailable between availability check and price calculation
-      // 2. FIFS registrar's price() function reverts for unavailable domains
-      // 3. RPC/network issues
+      
+      // Show user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes("revert") || errorMessage.includes("VM Exception")) {
+        // Domain is likely not available (contract reverted)
+        const unavailableDomains = validDomains.map(d => d.name).join(", ");
+        toast.error(
+          `Cannot calculate price: ${unavailableDomains} ${validDomains.length > 1 ? 'are' : 'is'} already registered or unavailable.`,
+          { autoClose: 5000 }
+        );
+      } else {
+        // Other errors (network, RPC, etc.)
+        toast.error("Failed to calculate registration price. Please try again.", { autoClose: 5000 });
+      }
+      
+      // Set price to 0 on error
       setTotalPrice(BigInt(0));
     } finally {
       setIsCalculatingTotal(false);

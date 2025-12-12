@@ -41,7 +41,10 @@ Create a `.env.local` file:
 NEXT_PUBLIC_CONTRACT_ADDRESS=
 
 # Rootstock Testnet RPC URL
-NEXT_PUBLIC_RPC_URL=https://public-node.testnet.rsk.co
+# IMPORTANT: Must support eth_getLogs method
+# The public-node.testnet.rsk.co does NOT support eth_getLogs
+# Use the RPC URL below which supports eth_getLogs:
+NEXT_PUBLIC_RPC_URL=https://rpc.testnet.rootstock.io/eB6SwV0sOgFuotmD35JzhuCqpnYf8W-T
 
 # Chain ID
 NEXT_PUBLIC_CHAIN_ID=31

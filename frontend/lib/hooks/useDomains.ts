@@ -186,8 +186,8 @@ export function useUserDomains() {
       const errorMessage = err instanceof Error ? err.message : String(err);
       if (errorMessage.includes("Invalid params") || errorMessage.includes("block range")) {
         errorMsg = "RPC block range limit reached. Try a smaller date range.";
-      } else if (errorMessage.includes("does not exist")) {
-        errorMsg = "RPC endpoint doesn't support event queries. Try refreshing or check your connection.";
+      } else if (errorMessage.includes("does not exist") || errorMessage.includes("eth_getLogs")) {
+        errorMsg = "RPC endpoint doesn't support eth_getLogs. Please set NEXT_PUBLIC_RPC_URL in .env.local to a compatible endpoint (e.g., https://rpc.testnet.rootstock.io/eB6SwV0sOgFuotmD35JzhuCqpnYf8W-T)";
       }
       
       setError(errorMsg);

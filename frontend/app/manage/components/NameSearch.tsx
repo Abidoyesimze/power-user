@@ -23,7 +23,7 @@ export default function NameSearch() {
     setSearchResult(null);
 
     try {
-      // Normalize the domain name
+      // Normalize the domain name (without .rsk for FIFS registrar)
       const domainName = searchTerm.toLowerCase().trim().replace(".rsk", "");
       const normalizedName = `${domainName}.rsk`;
 
@@ -34,76 +34,104 @@ export default function NameSearch() {
       // RNS Registry address on testnet
       const RNS_REGISTRY = "0x7d284aaac6e925aad802a53c0c69efe3764597b8" as const;
       
-      // Check domain ownership directly from RNS Registry (most reliable method)
-      const node = namehash(normalizedName);
-      
-      const owner = await publicClient.readContract({
-        address: RNS_REGISTRY,
-        abi: [
-          {
-            inputs: [{ name: "node", type: "bytes32" }],
-            name: "owner",
-            outputs: [{ name: "", type: "address" }],
-            stateMutability: "view",
-            type: "function",
-          },
-        ],
-        functionName: "owner",
-        args: [node],
-      });
+      // PRIORITY: Check FIFS registrar FIRST (most reliable for availability)
+      // This is what the official RNS manager uses
+      try {
+        const fifsRegistrarAddress = await publicClient.readContract({
+          address: RNS_BULK_MANAGER_ADDRESS,
+          abi: RNS_BULK_MANAGER_ABI,
+          functionName: "fifsRegistrar",
+        });
 
-      // If owner is zero address, domain is available
-      // If owner is not zero address, domain is registered
-      if (owner === "0x0000000000000000000000000000000000000000" || !owner) {
-        // Double-check with FIFS registrar for additional validation
-        try {
-          const fifsRegistrarAddress = await publicClient.readContract({
-            address: RNS_BULK_MANAGER_ADDRESS,
-            abi: RNS_BULK_MANAGER_ABI,
-            functionName: "fifsRegistrar",
+        const available = await publicClient.readContract({
+          address: fifsRegistrarAddress as `0x${string}`,
+          abi: [
+            {
+              inputs: [{ name: "name", type: "string" }],
+              name: "available",
+              outputs: [{ name: "", type: "bool" }],
+              stateMutability: "view",
+              type: "function",
+            },
+          ],
+          functionName: "available",
+          args: [domainName],
+        });
+
+        if (available) {
+          // FIFS registrar says available - domain is available
+          setSearchResult({
+            available: true,
+            registered: false,
           });
-
-          const available = await publicClient.readContract({
-            address: fifsRegistrarAddress as `0x${string}`,
-            abi: [
-              {
-                inputs: [{ name: "name", type: "string" }],
-                name: "available",
-                outputs: [{ name: "", type: "bool" }],
-                stateMutability: "view",
-                type: "function",
-              },
-            ],
-            functionName: "available",
-            args: [domainName],
-          });
-
-          if (available) {
-            setSearchResult({
-              available: true,
-              registered: false,
+          return;
+        } else {
+          // FIFS registrar says NOT available - domain is registered
+          // Now get owner info from registry for display
+          try {
+            const node = namehash(normalizedName);
+            const owner = await publicClient.readContract({
+              address: RNS_REGISTRY,
+              abi: [
+                {
+                  inputs: [{ name: "node", type: "bytes32" }],
+                  name: "owner",
+                  outputs: [{ name: "", type: "address" }],
+                  stateMutability: "view",
+                  type: "function",
+                },
+              ],
+              functionName: "owner",
+              args: [node],
             });
-          } else {
-            // Registrar says not available but registry shows zero - might be in process
+
+            setSearchResult({
+              available: false,
+              registered: true,
+              owner: owner && owner !== "0x0000000000000000000000000000000000000000" 
+                ? owner as string 
+                : undefined,
+            });
+          } catch {
+            // Can't get owner, but registrar confirms it's taken
             setSearchResult({
               available: false,
               registered: true,
             });
           }
-        } catch {
-          // If FIFS check fails, trust the registry check
+          return;
+        }
+      } catch (fifsError) {
+        console.error("FIFS registrar check failed, falling back to registry:", fifsError);
+        // Fallback to registry check if FIFS check fails
+        const node = namehash(normalizedName);
+        const owner = await publicClient.readContract({
+          address: RNS_REGISTRY,
+          abi: [
+            {
+              inputs: [{ name: "node", type: "bytes32" }],
+              name: "owner",
+              outputs: [{ name: "", type: "address" }],
+              stateMutability: "view",
+              type: "function",
+            },
+          ],
+          functionName: "owner",
+          args: [node],
+        });
+
+        if (owner === "0x0000000000000000000000000000000000000000" || !owner) {
           setSearchResult({
             available: true,
             registered: false,
           });
+        } else {
+          setSearchResult({
+            available: false,
+            registered: true,
+            owner: owner as string,
+          });
         }
-      } else {
-        // Domain is registered - owner exists
-        setSearchResult({
-          available: false,
-          registered: true,
-          owner: owner as string,
-        });
       }
     } catch (error) {
       console.error("Search error:", error);

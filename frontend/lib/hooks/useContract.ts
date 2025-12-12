@@ -224,8 +224,9 @@ export function useRNSBulkManager() {
       return false;
     } catch (error) {
       console.error('Error checking availability:', error);
-      // If we can't check, assume it's available (let the contract handle the error)
-      return true;
+      // If we can't check, assume it's unavailable to be safe
+      // This prevents false positives where domain shows available but registration fails
+      return false;
     }
   };
 

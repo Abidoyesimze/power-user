@@ -129,8 +129,9 @@ export function useRNSBulkManager() {
 
     try {
       // Normalize domain name (without .rsk for FIFS registrar)
-      const domainName = name.toLowerCase().trim().replace('.rsk', '');
-      const normalizedName = domainName.endsWith('.rsk') ? domainName : `${domainName}.rsk`;
+      // FIFS registrar expects domain names WITHOUT the .rsk suffix
+      const domainName = name.toLowerCase().trim().replace(/\.rsk$/i, '');
+      const normalizedName = `${domainName}.rsk`;
       const RNS_REGISTRY = "0x7d284aaac6e925aad802a53c0c69efe3764597b8" as const;
       const node = namehash(normalizedName);
       

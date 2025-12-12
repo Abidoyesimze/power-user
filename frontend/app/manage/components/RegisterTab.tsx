@@ -141,9 +141,16 @@ export default function RegisterTab() {
       // Recalculate prices after availability check
       if (available) {
         // Small delay to ensure state is updated before calculating prices
+        // This prevents race conditions where price calculation runs before availability is confirmed
         setTimeout(() => {
-          calculatePrices();
-        }, 200);
+          // Double-check that domain is still available before calculating price
+          const currentDomain = domains[index];
+          if (currentDomain && currentDomain.isAvailable === true && !currentDomain.isChecking) {
+            calculatePrices();
+          } else {
+            setTotalPrice(BigInt(0));
+          }
+        }, 300);
       } else {
         setTotalPrice(BigInt(0)); // Clear price if domain is unavailable
       }

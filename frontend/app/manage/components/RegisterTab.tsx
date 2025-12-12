@@ -10,13 +10,17 @@ interface DomainStatus {
   duration: string;
   isAvailable?: boolean;
   isChecking?: boolean;
+  price?: bigint;
+  isCalculatingPrice?: boolean;
 }
 
 export default function RegisterTab() {
   const [domains, setDomains] = useState<DomainStatus[]>([{ name: "", duration: "1" }]);
-  const { bulkRegister, isConnected, isLoading, address, hash, isConfirmed, reset, checkAvailability } = useRNSBulkManager();
+  const { bulkRegister, isConnected, isLoading, address, hash, isConfirmed, reset, checkAvailability, calculateRegistrationCost } = useRNSBulkManager();
   const { refetch: refetchDomains } = useUserDomains();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [totalPrice, setTotalPrice] = useState<bigint>(BigInt(0));
+  const [isCalculatingTotal, setIsCalculatingTotal] = useState(false);
   // Track recently registered domains to mark them as unavailable
   const [recentlyRegistered, setRecentlyRegistered] = useState<Set<string>>(new Set());
 
@@ -37,6 +41,46 @@ export default function RegisterTab() {
     if (field === "name" && value.trim()) {
       checkDomainAvailability(index, value);
     }
+    
+    // Recalculate prices when name or duration changes
+    if ((field === "name" || field === "duration") && value.trim()) {
+      calculatePrices();
+    }
+  };
+  
+  const calculatePrices = async () => {
+    const validDomains = domains.filter(d => d.name.trim() && d.isAvailable !== false);
+    if (validDomains.length === 0) {
+      setTotalPrice(BigInt(0));
+      return;
+    }
+    
+    setIsCalculatingTotal(true);
+    try {
+      const names = validDomains.map(d => d.name.trim());
+      const durations = validDomains.map(d => BigInt(parseInt(d.duration) * 365 * 24 * 60 * 60));
+      
+      const total = await calculateRegistrationCost(names, durations);
+      setTotalPrice(total);
+      
+      // Update individual prices
+      // Note: We can't get individual prices easily, so we'll show total only
+      // The official RNS manager shows individual prices, but that requires calling price() for each domain
+    } catch (error) {
+      console.error("Error calculating prices:", error);
+      setTotalPrice(BigInt(0));
+    } finally {
+      setIsCalculatingTotal(false);
+    }
+  };
+  
+  // Format RIF token amount (18 decimals)
+  const formatRIF = (amount: bigint): string => {
+    const rifAmount = Number(amount) / 1e18;
+    if (rifAmount < 0.01) {
+      return "< 0.01 RIF";
+    }
+    return `${rifAmount.toFixed(4)} RIF`;
   };
 
   const checkDomainAvailability = async (index: number, name: string) => {
@@ -66,6 +110,11 @@ export default function RegisterTab() {
         updated[index] = { ...updated[index], isAvailable: available, isChecking: false };
         return updated;
       });
+      
+      // Recalculate prices after availability check
+      if (available) {
+        calculatePrices();
+      }
     } catch (error) {
       console.error(`Error checking availability for ${name}:`, error);
       setDomains(prev => {
@@ -75,6 +124,15 @@ export default function RegisterTab() {
       });
     }
   };
+  
+  // Calculate prices when domains change
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      calculatePrices();
+    }, 500); // Debounce price calculation
+    
+    return () => clearTimeout(timer);
+  }, [domains]);
 
   // Show success message when transaction is confirmed
   useEffect(() => {
@@ -240,6 +298,23 @@ export default function RegisterTab() {
           ))}
         </div>
 
+        {/* Total Price Display */}
+        {totalPrice > BigInt(0) && (
+          <div className="mt-6 p-4 bg-purple-900/20 border border-purple-500/30 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-400">Total Registration Cost</p>
+                <p className="text-2xl font-bold text-purple-400">
+                  {isCalculatingTotal ? "Calculating..." : formatRIF(totalPrice)}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Paid in RIF tokens • Official RNS pricing
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-4 mt-6">
           <button
             onClick={addDomain}
@@ -253,7 +328,8 @@ export default function RegisterTab() {
               isProcessing || 
               isLoading || 
               !isConnected || 
-              domains.some(d => d.isAvailable === false)
+              domains.some(d => d.isAvailable === false) ||
+              domains.every(d => !d.name.trim())
             }
             className="px-6 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-1"
           >
@@ -261,7 +337,9 @@ export default function RegisterTab() {
               ? "Processing..." 
               : domains.some(d => d.isAvailable === false)
               ? "Some domains are unavailable"
-              : `Register ${domains.length} Domain${domains.length > 1 ? "s" : ""}`
+              : domains.every(d => !d.name.trim())
+              ? "Enter domain names"
+              : `Register ${domains.filter(d => d.name.trim()).length} Domain${domains.filter(d => d.name.trim()).length > 1 ? "s" : ""}`
             }
           </button>
         </div>

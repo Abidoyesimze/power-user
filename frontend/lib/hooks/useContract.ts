@@ -86,6 +86,21 @@ export function useRNSBulkManager() {
     });
   };
 
+  const calculateRegistrationCost = async (names: string[], durations: bigint[]): Promise<bigint> => {
+    if (!publicClient) {
+      throw new Error('Public client not available');
+    }
+
+    const result = await publicClient.readContract({
+      address: RNS_BULK_MANAGER_ADDRESS,
+      abi: RNS_BULK_MANAGER_ABI,
+      functionName: 'calculateRegistrationCost',
+      args: [names, durations],
+    });
+
+    return result as bigint;
+  };
+
   const calculateRenewalCost = async (names: string[], durations: bigint[]): Promise<bigint> => {
     if (!publicClient) {
       throw new Error('Public client not available');
@@ -212,6 +227,7 @@ export function useRNSBulkManager() {
     bulkRenew,
     bulkSetAddress,
     bulkSetResolver,
+    calculateRegistrationCost,
     calculateRenewalCost,
     checkAvailability,
     nameToNode,

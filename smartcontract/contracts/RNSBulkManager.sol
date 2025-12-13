@@ -61,6 +61,11 @@ contract RNSBulkManager {
         string errorMessage;
     }
     
+    // Fixed price per year (workaround for FIFS registrar bug on testnet)
+    // The registrar returns duration + 2 RIF, making long durations impossible
+    // We use a fixed reasonable price: 0.1 RIF per year
+    uint256 public constant PRICE_PER_YEAR = 1 * 10**17; // 0.1 RIF in wei
+    
     struct MultiChainAddressUpdate {
         bytes32 node;
         uint256 coinType;
@@ -109,16 +114,27 @@ contract RNSBulkManager {
         uint256 successCount = 0;
         uint256 totalCost = 0;
         
-        // Calculate total cost first
-        // For new registrations, expires = 0
+        // Calculate total cost using fixed price
+        // WORKAROUND: FIFS registrar on testnet has a bug where it returns duration + 2 RIF
+        // For long durations (years), this makes registration impossible
+        // We use a fixed reasonable price: 0.1 RIF per year
         for (uint256 i = 0; i < requests.length; i++) {
-            try fifsRegistrar.price(requests[i].name, 0, requests[i].duration) returns (uint256 cost) {
-                totalCost += cost;
-            } catch {
-                results[i] = OperationResult(false, i, "Failed to get price");
-                emit OperationFailed(i, "Failed to get price");
-                continue;
+            // Convert duration (seconds) to years and calculate price
+            // 1 year = 31536000 seconds
+            uint256 durationInYears = (requests[i].duration * 100) / 31536000; // Multiply by 100 for precision
+            uint256 cost = (PRICE_PER_YEAR * durationInYears) / 100; // Divide by 100 to get final price
+            
+            // Minimum price: 0.01 RIF (for durations less than 1 year)
+            if (cost < 1 * 10**16) {
+                cost = 1 * 10**16; // 0.01 RIF minimum
             }
+            
+            totalCost += cost;
+        }
+        
+        // If all registrations failed due to price issues, revert with clear message
+        if (totalCost == 0) {
+            revert("All registrations failed: Unable to calculate price");
         }
         
         // Transfer total RIF tokens from user to this contract
@@ -361,12 +377,21 @@ contract RNSBulkManager {
     function calculateRegistrationCost(
         string[] calldata names,
         uint256[] calldata durations
-    ) external view returns (uint256 totalCost) {
+    ) external pure returns (uint256 totalCost) {
         require(names.length == durations.length, "Array length mismatch");
         
-        // For new registrations, expires = 0
+        // Use fixed price: 0.1 RIF per year (workaround for FIFS registrar bug)
         for (uint256 i = 0; i < names.length; i++) {
-            totalCost += fifsRegistrar.price(names[i], 0, durations[i]);
+            // Convert duration (seconds) to years and calculate price
+            uint256 durationInYears = (durations[i] * 100) / 31536000;
+            uint256 cost = (PRICE_PER_YEAR * durationInYears) / 100;
+            
+            // Minimum price: 0.01 RIF (for durations less than 1 year)
+            if (cost < 1 * 10**16) {
+                cost = 1 * 10**16; // 0.01 RIF minimum
+            }
+            
+            totalCost += cost;
         }
         
         return totalCost;

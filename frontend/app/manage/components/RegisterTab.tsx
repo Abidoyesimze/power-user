@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRNSBulkManager } from "@/lib/hooks/useContract";
+import { useRNSRegistrar, CommitResult } from "@/lib/hooks/useRNSRegistrar";
 import { toast } from "react-toastify";
 import { useUserDomains } from "@/lib/hooks/useDomains";
 
@@ -17,12 +18,20 @@ interface DomainStatus {
 export default function RegisterTab() {
   const [domains, setDomains] = useState<DomainStatus[]>([{ name: "", duration: "1" }]);
   const { bulkRegister, isConnected, isLoading, address, hash, isConfirmed, reset, checkAvailability, calculateRegistrationCost } = useRNSBulkManager();
+  const { bulkCommit, canReveal, isReady: isRegistrarReady } = useRNSRegistrar();
   const { refetch: refetchDomains, domains: userDomains } = useUserDomains();
   const [isProcessing, setIsProcessing] = useState(false);
   const [totalPrice, setTotalPrice] = useState<bigint>(BigInt(0));
   const [isCalculatingTotal, setIsCalculatingTotal] = useState(false);
   // Track recently registered domains to mark them as unavailable
   const [recentlyRegistered, setRecentlyRegistered] = useState<Set<string>>(new Set());
+  
+  // Commit-reveal flow state
+  const [commitResults, setCommitResults] = useState<CommitResult[]>([]);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [isCommitting, setIsCommitting] = useState(false);
+  const [isWaitingForReveal, setIsWaitingForReveal] = useState(false);
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const addDomain = () => {
     setDomains([...domains, { name: "", duration: "1" }]);
@@ -271,6 +280,14 @@ export default function RegisterTab() {
         );
       }, 2000);
       
+      // Clear commit-reveal state
+      setCommitResults([]);
+      setCountdown(null);
+      setIsWaitingForReveal(false);
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+      }
+      
       // Clear the form
       setDomains([{ name: "", duration: "1" }]);
       
@@ -291,9 +308,58 @@ export default function RegisterTab() {
     }
   }, [isConfirmed, hash, domains, reset, refetchDomains]);
 
+  // Cleanup countdown interval on unmount
+  useEffect(() => {
+    return () => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Check if commitments can be revealed (poll every second)
+  useEffect(() => {
+    if (!isWaitingForReveal || commitResults.length === 0 || !isRegistrarReady) {
+      return;
+    }
+
+    const checkReveal = async () => {
+      try {
+        // Check all commitments
+        const canRevealChecks = await Promise.all(
+          commitResults.map(result => canReveal(result.commitmentHash))
+        );
+
+        // If all can be revealed, enable registration
+        if (canRevealChecks.every(can => can)) {
+          setIsWaitingForReveal(false);
+          setCountdown(0);
+          if (countdownIntervalRef.current) {
+            clearInterval(countdownIntervalRef.current);
+          }
+          toast.success("Commitments are ready! You can now register.");
+        }
+      } catch (error) {
+        console.error("Error checking reveal status:", error);
+      }
+    };
+
+    // Check immediately
+    checkReveal();
+
+    // Then check every 2 seconds
+    const interval = setInterval(checkReveal, 2000);
+    return () => clearInterval(interval);
+  }, [isWaitingForReveal, commitResults, canReveal, isRegistrarReady]);
+
   const handleRegister = async () => {
     if (!isConnected || !address) {
       toast.error("Please connect your wallet first");
+      return;
+    }
+
+    if (!isRegistrarReady) {
+      toast.error("RNS registrar not ready. Please wait...");
       return;
     }
 
@@ -319,32 +385,148 @@ export default function RegisterTab() {
       return;
     }
 
-    try {
-      setIsProcessing(true);
-      toast.info("Preparing registration transaction...");
-      
-          // For FIFS registration, secret is just empty bytes32 (0x0000...0000)
-          // IMPORTANT: FIFS registrar expects domain names WITHOUT the .rsk suffix
-          const emptySecret = "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`;
-          
-          const requests = domains.map((d) => ({
-            name: d.name.trim().replace(/\.rsk$/i, ''), // Remove .rsk suffix if present (FIFS registrar expects name without TLD)
-            owner: address, // Use connected wallet address
-            secret: emptySecret, // Empty bytes32 for FIFS
-            duration: BigInt(parseInt(d.duration) * 365 * 24 * 60 * 60),
-            addr: address, // Address to set for the domain after registration (use owner address by default)
-          }));
+    // If we have commit results and countdown is 0, proceed with registration
+    if (commitResults.length > 0 && countdown === 0) {
+      await proceedWithRegistration();
+      return;
+    }
 
-      await bulkRegister(requests);
+    // If we have commit results but still waiting, show message
+    if (commitResults.length > 0 && countdown !== null && countdown > 0) {
+      toast.info(`Please wait ${countdown} seconds before registration...`);
+      return;
+    }
+
+    // Step 1: Commit all domains
+    try {
+      setIsCommitting(true);
+      setIsProcessing(true);
+      toast.info("Step 1/2: Committing domains...");
+
+      const domainNames = domains.map(d => d.name.trim());
+      const results = await bulkCommit(domainNames);
+
+      if (results.length === 0) {
+        throw new Error("No domains were committed successfully");
+      }
+
+      setCommitResults(results);
+      setIsCommitting(false);
+      setIsWaitingForReveal(true);
       
-      // Show info message - success will be shown in useEffect when confirmed
-      toast.info(`Transaction submitted! Please confirm in your wallet to register ${domains.length} domain${domains.length > 1 ? 's' : ''}.`);
+      // Start countdown from 60 seconds
+      setCountdown(60);
+      toast.success(`Step 1/2 Complete: ${results.length} domain${results.length > 1 ? 's' : ''} committed! Waiting 60 seconds...`);
+
+      // Start countdown timer
+      countdownIntervalRef.current = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev === null || prev <= 1) {
+            if (countdownIntervalRef.current) {
+              clearInterval(countdownIntervalRef.current);
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
     } catch (error) {
-      console.error("Registration failed:", error);
-      toast.error(`Registration failed: ${error instanceof Error ? error.message : "Unknown error"}`);
-    } finally {
+      console.error("Commit failed:", error);
+      toast.error(`Commit failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+      setIsCommitting(false);
       setIsProcessing(false);
     }
+  };
+
+  const proceedWithRegistration = async () => {
+    if (!isConnected || !address || commitResults.length === 0) {
+      return;
+    }
+
+    try {
+      setIsProcessing(true);
+      toast.info("Step 2/2: Registering domains...");
+
+      // Create registration requests using secrets from commit results
+      const requests = domains
+        .filter(d => d.name.trim())
+        .map((d) => {
+          // Find matching commit result
+          const commitResult = commitResults.find(
+            cr => cr.domain.toLowerCase().trim() === d.name.toLowerCase().trim()
+          );
+
+          if (!commitResult) {
+            throw new Error(`No commit result found for domain: ${d.name}`);
+          }
+
+          return {
+            name: d.name.trim().replace(/\.rsk$/i, ''), // Remove .rsk suffix
+            owner: address,
+            secret: commitResult.secret, // Use secret from commit
+            duration: BigInt(parseInt(d.duration) * 365 * 24 * 60 * 60),
+            addr: address,
+          };
+        });
+
+      console.log("Calling bulkRegister with requests:", requests);
+      
+      // Call bulkRegister - this will:
+      // 1. Check allowance
+      // 2. Approve if needed (wallet popup #1)
+      // 3. Call writeContract (wallet popup #2)
+      // 4. Wait for transaction confirmation
+      await bulkRegister(requests);
+
+      // Transaction is now confirmed
+      const registeredCount = domains.length;
+      
+      // Store registered domain names for the useEffect
+      const registeredNames = domains
+        .filter(d => d.name.trim())
+        .map(d => d.name.toLowerCase().trim());
+      setRecentlyRegistered(prev => {
+        const newSet = new Set(prev);
+        registeredNames.forEach(name => newSet.add(name));
+        return newSet;
+      });
+      
+      // Reset state
+      setIsProcessing(false);
+      
+      // Clear commit results and countdown
+      setCommitResults([]);
+      setCountdown(null);
+      setIsWaitingForReveal(false);
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+      }
+      
+      // Clear domain inputs
+      setDomains([{ name: '', duration: '1', isAvailable: null, isChecking: false, price: BigInt(0) }]);
+      
+      toast.success(`Successfully registered ${registeredCount} domain${registeredCount > 1 ? 's' : ''}!`);
+      
+      // Refetch domains to show newly registered ones
+      refetchDomains();
+    } catch (error) {
+      console.error("Registration failed:", error);
+      
+      // Reset processing state on error
+      setIsProcessing(false);
+      
+      // Show user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      if (errorMessage.includes("User rejected") || errorMessage.includes("denied")) {
+        toast.error("Transaction was cancelled. Please try again when ready.");
+      } else if (errorMessage.includes("allowance") || errorMessage.includes("approve")) {
+        toast.error("Token approval failed. Please try again.");
+      } else {
+        toast.error(`Registration failed: ${errorMessage}`);
+      }
+    }
+    // Note: Don't set isProcessing to false here - let it stay true until transaction is confirmed or user cancels
   };
 
   return (
@@ -420,6 +602,37 @@ export default function RegisterTab() {
           ))}
         </div>
 
+        {/* Commit-Reveal Status */}
+        {commitResults.length > 0 && (
+          <div className="mt-6 p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-blue-400 font-semibold">
+                  {isWaitingForReveal 
+                    ? `Step 1/2 Complete: ${commitResults.length} domain${commitResults.length > 1 ? 's' : ''} committed`
+                    : countdown === 0
+                    ? "Ready to register!"
+                    : "Waiting for commitments to mature..."
+                  }
+                </p>
+                {countdown !== null && countdown > 0 && (
+                  <p className="text-2xl font-bold text-blue-400 mt-2">
+                    {countdown} seconds remaining
+                  </p>
+                )}
+                {countdown === 0 && (
+                  <p className="text-sm text-green-400 mt-2">
+                    ✓ Commitments are ready. Click Register to proceed.
+                  </p>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Commit-reveal scheme prevents front-running (60 second wait required)
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Total Price Display */}
         <div className="mt-6 p-4 bg-purple-900/20 border border-purple-500/30 rounded-lg">
           <div className="flex items-center justify-between">
@@ -457,17 +670,25 @@ export default function RegisterTab() {
               isProcessing || 
               isLoading || 
               !isConnected || 
+              !isRegistrarReady ||
               domains.some(d => d.isAvailable === false) ||
-              domains.every(d => !d.name.trim())
+              domains.every(d => !d.name.trim()) ||
+              (commitResults.length > 0 && countdown !== null && countdown > 0)
             }
             className="px-6 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-1"
           >
-            {isProcessing || isLoading 
+            {isCommitting
+              ? "Committing..."
+              : isWaitingForReveal && countdown !== null && countdown > 0
+              ? `Waiting... (${countdown}s)`
+              : isProcessing || isLoading 
               ? "Processing..." 
               : domains.some(d => d.isAvailable === false)
               ? "Some domains are unavailable"
               : domains.every(d => !d.name.trim())
               ? "Enter domain names"
+              : commitResults.length > 0 && countdown === 0
+              ? `Register ${domains.filter(d => d.name.trim()).length} Domain${domains.filter(d => d.name.trim()).length > 1 ? "s" : ""}`
               : `Register ${domains.filter(d => d.name.trim()).length} Domain${domains.filter(d => d.name.trim()).length > 1 ? "s" : ""}`
             }
           </button>

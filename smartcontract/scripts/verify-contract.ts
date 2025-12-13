@@ -6,7 +6,7 @@ import { fileURLToPath } from "url";
 config();
 
 async function main() {
-  const contractAddress = process.env.RNS_BULK_MANAGER_ADDRESS || "0xdb34e8611333fd6dd3a57c59f125eba8878378cd";
+  const contractAddress = process.env.RNS_BULK_MANAGER_ADDRESS || "0xbf1b2ca2cc17bd98679d584575d549c62b3214eb";
   
   console.log("📄 Preparing contract verification for RNSBulkManager");
   console.log("📍 Contract Address:", contractAddress);

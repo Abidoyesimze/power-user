@@ -17,7 +17,7 @@ async function main() {
   console.log("🔍 RNS Registration Verification Script\n");
 
   // Contract addresses
-  const RNS_BULK_MANAGER = process.env.RNS_BULK_MANAGER_ADDRESS || "0xdb34e8611333fd6dd3a57c59f125eba8878378cd";
+  const RNS_BULK_MANAGER = process.env.RNS_BULK_MANAGER_ADDRESS || "0xbf1b2ca2cc17bd98679d584575d549c62b3214eb";
   const RNS_REGISTRY = process.env.RNS_REGISTRY_TESTNET || "0x7d284aaac6e925aad802a53c0c69efe3764597b8";
   const RIF_TOKEN = process.env.RIF_TOKEN_TESTNET || "0x19f64674d8a5b4e652319f5e239efd3bc969a1fe";
   const FIFS_REGISTRAR = process.env.FIFS_ADDR_REGISTRAR_TESTNET || "0x90734bd6bf96250a7b262e2bc34284b0d47c1e8d";

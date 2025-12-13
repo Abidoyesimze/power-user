@@ -36,12 +36,17 @@ export function useRNSBulkManager() {
     // RIF Token address on testnet
     const RIF_TOKEN = '0x19f64674d8a5b4e652319f5e239efd3bc969a1fe' as `0x${string}`;
 
+    console.log('Starting bulkRegister...', { requestCount: requests.length });
+    
     // Calculate total cost first
     const names = requests.map(r => r.name);
     const durations = requests.map(r => r.duration);
+    console.log('Calculating registration cost...');
     const totalCost = await calculateRegistrationCost(names, durations);
+    console.log('Total cost calculated:', totalCost.toString());
 
     // Check current allowance
+    console.log('Checking RIF token allowance...');
     const currentAllowance = await publicClient.readContract({
       address: RIF_TOKEN,
       abi: [
@@ -59,6 +64,7 @@ export function useRNSBulkManager() {
       functionName: 'allowance',
       args: [address, RNS_BULK_MANAGER_ADDRESS]
     });
+    console.log('Current allowance:', currentAllowance.toString());
 
     // Approve tokens if allowance is insufficient
     if (currentAllowance < totalCost) {

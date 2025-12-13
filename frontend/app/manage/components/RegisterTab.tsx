@@ -32,6 +32,7 @@ export default function RegisterTab() {
   const [isCommitting, setIsCommitting] = useState(false);
   const [isWaitingForReveal, setIsWaitingForReveal] = useState(false);
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const availabilityCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const addDomain = () => {
     setDomains([...domains, { name: "", duration: "1" }]);
@@ -154,49 +155,67 @@ export default function RegisterTab() {
   };
 
   const checkDomainAvailability = async (index: number, name: string) => {
-    const normalizedName = name.toLowerCase().trim();
-    const normalizedNameWithRsk = normalizedName.endsWith('.rsk') ? normalizedName : `${normalizedName}.rsk`;
+    const normalizedName = name.toLowerCase().trim().replace(/\.rsk$/i, '');
+    const normalizedNameWithRsk = `${normalizedName}.rsk`;
     
-    // Step 1: Check if this domain was recently registered
-    if (recentlyRegistered.has(normalizedName)) {
+    // Skip empty names or very short names (less than 3 characters)
+    // This prevents checking on every keystroke and avoids errors for invalid short names
+    if (!normalizedName || normalizedName.length < 3) {
       setDomains(prev => {
         const updated = [...prev];
-        updated[index] = { ...updated[index], isAvailable: false, isChecking: false };
+        updated[index] = { ...updated[index], isAvailable: undefined, isChecking: false };
         return updated;
       });
       return;
     }
     
-    // Step 2: Check if domain is in user's registered domains list (same as NameSearch)
-    const isInUserDomains = userDomains.some(
-      d => d.name.toLowerCase() === normalizedNameWithRsk.toLowerCase()
-    );
-    
-    if (isInUserDomains) {
-      // Domain is already registered by this user
-      setDomains(prev => {
-        const updated = [...prev];
-        updated[index] = { ...updated[index], isAvailable: false, isChecking: false };
-        return updated;
-      });
-      return;
+    // Clear any pending availability check
+    if (availabilityCheckTimeoutRef.current) {
+      clearTimeout(availabilityCheckTimeoutRef.current);
     }
     
-    // Step 3: Check availability using the hook (which checks FIFS registrar and registry)
-    try {
-      setDomains(prev => {
-        const updated = [...prev];
-        updated[index] = { ...updated[index], isChecking: true, isAvailable: undefined };
-        return updated;
-      });
-
-      const available = await checkAvailability(name);
+    // Debounce availability check - wait 500ms after user stops typing
+    availabilityCheckTimeoutRef.current = setTimeout(async () => {
+      // Step 1: Check if this domain was recently registered
+      if (recentlyRegistered.has(normalizedName)) {
+        setDomains(prev => {
+          const updated = [...prev];
+          updated[index] = { ...updated[index], isAvailable: false, isChecking: false };
+          return updated;
+        });
+        return;
+      }
       
-      setDomains(prev => {
-        const updated = [...prev];
-        updated[index] = { ...updated[index], isAvailable: available, isChecking: false };
-        return updated;
-      });
+      // Step 2: Check if domain is in user's registered domains list (same as NameSearch)
+      const isInUserDomains = userDomains.some(
+        d => d.name.toLowerCase() === normalizedNameWithRsk.toLowerCase()
+      );
+      
+      if (isInUserDomains) {
+        // Domain is already registered by this user
+        setDomains(prev => {
+          const updated = [...prev];
+          updated[index] = { ...updated[index], isAvailable: false, isChecking: false };
+          return updated;
+        });
+        return;
+      }
+      
+      // Step 3: Check availability using the hook (which checks FIFS registrar and registry)
+      try {
+        setDomains(prev => {
+          const updated = [...prev];
+          updated[index] = { ...updated[index], isChecking: true, isAvailable: undefined };
+          return updated;
+        });
+
+        const available = await checkAvailability(name);
+        
+        setDomains(prev => {
+          const updated = [...prev];
+          updated[index] = { ...updated[index], isAvailable: available, isChecking: false };
+          return updated;
+        });
       
       // Recalculate prices after availability check
       if (available) {
@@ -308,11 +327,14 @@ export default function RegisterTab() {
     }
   }, [isConfirmed, hash, domains, reset, refetchDomains]);
 
-  // Cleanup countdown interval on unmount
+  // Cleanup intervals on unmount
   useEffect(() => {
     return () => {
       if (countdownIntervalRef.current) {
         clearInterval(countdownIntervalRef.current);
+      }
+      if (availabilityCheckTimeoutRef.current) {
+        clearTimeout(availabilityCheckTimeoutRef.current);
       }
     };
   }, []);

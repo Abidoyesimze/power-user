@@ -147,11 +147,15 @@ contract RNSBulkManager {
         rifToken.approve(address(fifsRegistrar), totalCost);
         
         // Process each registration
+        // FIFS registrar uses commit-reveal scheme with 60 second minCommitmentAge
+        // Users must commit first (via frontend or bulkCommit), wait 60 seconds, then call this function
+        // This function will register domains using the secrets from the commit phase
         for (uint256 i = 0; i < requests.length; i++) {
-            if (!results[i].success && bytes(results[i].errorMessage).length > 0) {
-                continue; // Skip if price calculation failed
-            }
-            
+            // Try to register using the provided secret
+            // This will work if:
+            // 1. Commitment was made in a previous transaction (frontend handles this)
+            // 2. minCommitmentAge (60 seconds) has passed (frontend handles this)
+            // 3. Commitment matches the registration parameters (secret, name, owner)
             try fifsRegistrar.register(
                 requests[i].name,
                 requests[i].owner,
@@ -162,8 +166,19 @@ contract RNSBulkManager {
                 results[i] = OperationResult(true, i, "");
                 successCount++;
             } catch Error(string memory reason) {
-                results[i] = OperationResult(false, i, reason);
-                emit OperationFailed(i, reason);
+                // Check if error is about commitment
+                if (keccak256(bytes(reason)) == keccak256(bytes("No commitment found")) || 
+                    keccak256(bytes(reason)) == keccak256(bytes("Commitment too new"))) {
+                    results[i] = OperationResult(
+                        false, 
+                        i, 
+                        "Commitment required: Commit first, wait 60 seconds, then register"
+                    );
+                    emit OperationFailed(i, "Commitment required: Commit first, wait 60 seconds, then register");
+                } else {
+                    results[i] = OperationResult(false, i, reason);
+                    emit OperationFailed(i, reason);
+                }
             } catch {
                 results[i] = OperationResult(false, i, "Registration failed");
                 emit OperationFailed(i, "Registration failed");
@@ -171,6 +186,52 @@ contract RNSBulkManager {
         }
         
         emit BulkRegistration(msg.sender, successCount, totalCost);
+        
+        return results;
+    }
+    
+    /**
+     * @dev Bulk commit domains for registration (required before bulkRegister)
+     * FIFS registrar uses commit-reveal scheme with 60 second minCommitmentAge
+     * Users must call this first, wait 60 seconds, then call bulkRegister
+     * @param requests Array of registration requests (same format as bulkRegister)
+     * @return results Array of operation results
+     */
+    function bulkCommit(RegistrationRequest[] calldata requests) 
+        external 
+        returns (OperationResult[] memory results) 
+    {
+        require(requests.length > 0, "Empty request array");
+        require(requests.length <= 50, "Too many requests (max 50)");
+        
+        results = new OperationResult[](requests.length);
+        uint256 successCount = 0;
+        
+        for (uint256 i = 0; i < requests.length; i++) {
+            // Create commitment hash using FIFS registrar's makeCommitment function
+            // Commitment = keccak256(keccak256(name), owner, secret)
+            bytes32 label = keccak256(bytes(requests[i].name));
+            bytes32 commitment;
+            
+            try fifsRegistrar.makeCommitment(label, requests[i].owner, requests[i].secret) returns (bytes32 registrarCommitment) {
+                commitment = registrarCommitment;
+            } catch {
+                // Fallback: calculate commitment manually if makeCommitment fails
+                commitment = keccak256(abi.encodePacked(label, requests[i].owner, requests[i].secret));
+            }
+            
+            // Commit the commitment
+            try fifsRegistrar.commit(commitment) {
+                results[i] = OperationResult(true, i, "");
+                successCount++;
+            } catch Error(string memory reason) {
+                results[i] = OperationResult(false, i, string(abi.encodePacked("Commit failed: ", reason)));
+                emit OperationFailed(i, string(abi.encodePacked("Commit failed: ", reason)));
+            } catch {
+                results[i] = OperationResult(false, i, "Commit failed");
+                emit OperationFailed(i, "Commit failed");
+            }
+        }
         
         return results;
     }

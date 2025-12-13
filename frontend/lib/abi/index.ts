@@ -1,6 +1,6 @@
 import RNSBulkManagerABI from './abi.json';
 
-export const RNS_BULK_MANAGER_ADDRESS = '0xdd190753dd92104de84555892344c05b9c009577';
+export const RNS_BULK_MANAGER_ADDRESS = '0x6621e4f2fc0761ab31d1b89babef2be0a83901ab';
 
 // Extract the abi array from the Hardhat artifact
 export const RNS_BULK_MANAGER_ABI = RNSBulkManagerABI.abi || RNSBulkManagerABI;

@@ -65,8 +65,15 @@ export function useRNSBulkManager() {
         throw new Error('Wallet client not available');
       }
 
+      console.log('Insufficient allowance. Requesting approval...', {
+        currentAllowance: currentAllowance.toString(),
+        totalCost: totalCost.toString()
+      });
+
       // Approve a bit more than needed to avoid frequent approvals
       const approveAmount = totalCost * BigInt(2); // Approve 2x the cost for future registrations
+      
+      toast.info("Please approve RIF token spending in your wallet...");
       
       const approveHash = await walletClient.writeContract({
         address: RIF_TOKEN,
@@ -86,22 +93,43 @@ export function useRNSBulkManager() {
         args: [RNS_BULK_MANAGER_ADDRESS, approveAmount]
       });
 
+      console.log('Approval transaction submitted:', approveHash);
+      toast.info("Waiting for approval confirmation...");
+
       // Wait for approval transaction to be confirmed
       await publicClient.waitForTransactionReceipt({ hash: approveHash });
+      console.log('Approval confirmed');
+      toast.success("Token approval confirmed!");
     }
 
     // Write the contract transaction
-    // Note: We use writeContract which returns a hash, and useWaitForTransactionReceipt handles the waiting
-    await writeContract({
+    // Note: writeContract is async and will trigger wallet popup
+    // It returns a promise that resolves when user confirms in wallet
+    console.log('Calling writeContract for bulkRegister...', {
       address: RNS_BULK_MANAGER_ADDRESS,
-      abi: RNS_BULK_MANAGER_ABI,
-      functionName: 'bulkRegister',
-      args: [requests],
+      requestCount: requests.length
     });
     
-    // The transaction hash is stored in the hook's `hash` state
-    // useWaitForTransactionReceipt will handle waiting for confirmation
-    // Domains are registered through the official FIFS registrar, so they should appear in the official RNS registry
+    toast.info("Please confirm the registration transaction in your wallet...");
+    
+    try {
+      await writeContract({
+        address: RNS_BULK_MANAGER_ADDRESS,
+        abi: RNS_BULK_MANAGER_ABI,
+        functionName: 'bulkRegister',
+        args: [requests],
+      });
+      
+      console.log('writeContract call completed. Transaction hash:', hash);
+      
+      // The transaction hash is stored in the hook's `hash` state
+      // useWaitForTransactionReceipt will handle waiting for confirmation
+      // Domains are registered through the official FIFS registrar, so they should appear in the official RNS registry
+    } catch (writeError) {
+      // If writeContract fails, it might be because user rejected or there's an error
+      console.error('writeContract error:', writeError);
+      throw writeError;
+    }
   };
 
   const bulkRenew = async (domains: string[], durations: bigint[]) => {

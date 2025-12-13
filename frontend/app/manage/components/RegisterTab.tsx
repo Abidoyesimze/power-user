@@ -470,23 +470,35 @@ export default function RegisterTab() {
           };
         });
 
+      console.log("Calling bulkRegister with requests:", requests);
+      
+      // Call bulkRegister - this will:
+      // 1. Check allowance
+      // 2. Approve if needed (wallet popup #1)
+      // 3. Call writeContract (wallet popup #2)
       await bulkRegister(requests);
 
-      // Clear commit results and countdown
-      setCommitResults([]);
-      setCountdown(null);
-      setIsWaitingForReveal(false);
-      if (countdownIntervalRef.current) {
-        clearInterval(countdownIntervalRef.current);
-      }
-
+      // Note: Don't clear state here - wait for transaction confirmation
+      // The useEffect will handle clearing state when isConfirmed is true
+      
       toast.info(`Transaction submitted! Please confirm in your wallet to register ${domains.length} domain${domains.length > 1 ? 's' : ''}.`);
     } catch (error) {
       console.error("Registration failed:", error);
-      toast.error(`Registration failed: ${error instanceof Error ? error.message : "Unknown error"}`);
-    } finally {
+      
+      // Reset processing state on error
       setIsProcessing(false);
+      
+      // Show user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      if (errorMessage.includes("User rejected") || errorMessage.includes("denied")) {
+        toast.error("Transaction was cancelled. Please try again when ready.");
+      } else if (errorMessage.includes("allowance") || errorMessage.includes("approve")) {
+        toast.error("Token approval failed. Please try again.");
+      } else {
+        toast.error(`Registration failed: ${errorMessage}`);
+      }
     }
+    // Note: Don't set isProcessing to false here - let it stay true until transaction is confirmed or user cancels
   };
 
   return (

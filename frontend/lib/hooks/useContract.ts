@@ -334,7 +334,10 @@ export function useRNSBulkManager() {
         } catch (fifsCallError) {
           // If FIFS registrar call reverts, the domain is NOT available
           // FIFS registrar reverts for unavailable/invalid domains
-          console.warn('FIFS registrar available() call reverted - domain is unavailable:', fifsCallError);
+          // This is expected behavior - only log in debug mode
+          if (process.env.NODE_ENV === 'development') {
+            console.debug('FIFS registrar available() call reverted - domain is unavailable');
+          }
           fifsAvailable = false; // Treat revert as unavailable
         }
       } catch (fifsError) {

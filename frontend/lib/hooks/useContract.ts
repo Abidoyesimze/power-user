@@ -38,33 +38,56 @@ export function useRNSBulkManager() {
 
     console.log('Starting bulkRegister...', { requestCount: requests.length });
     
-    // Calculate total cost first
+    // Calculate total cost first (with timeout)
     const names = requests.map(r => r.name);
     const durations = requests.map(r => r.duration);
     console.log('Calculating registration cost...');
-    const totalCost = await calculateRegistrationCost(names, durations);
-    console.log('Total cost calculated:', totalCost.toString());
+    
+    let totalCost: bigint;
+    try {
+      totalCost = await Promise.race([
+        calculateRegistrationCost(names, durations),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Cost calculation timeout')), 30000)
+        )
+      ]);
+      console.log('Total cost calculated:', totalCost.toString());
+    } catch (error) {
+      console.error('Failed to calculate cost:', error);
+      throw new Error(`Failed to calculate registration cost: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
 
-    // Check current allowance
+    // Check current allowance (with timeout)
     console.log('Checking RIF token allowance...');
-    const currentAllowance = await publicClient.readContract({
-      address: RIF_TOKEN,
-      abi: [
-        {
-          inputs: [
-            { name: 'owner', type: 'address' },
-            { name: 'spender', type: 'address' }
-          ],
-          name: 'allowance',
-          outputs: [{ name: '', type: 'uint256' }],
-          stateMutability: 'view',
-          type: 'function'
-        }
-      ] as const,
-      functionName: 'allowance',
-      args: [address, RNS_BULK_MANAGER_ADDRESS]
-    });
-    console.log('Current allowance:', currentAllowance.toString());
+    let currentAllowance: bigint;
+    try {
+      currentAllowance = await Promise.race([
+        publicClient.readContract({
+          address: RIF_TOKEN,
+          abi: [
+            {
+              inputs: [
+                { name: 'owner', type: 'address' },
+                { name: 'spender', type: 'address' }
+              ],
+              name: 'allowance',
+              outputs: [{ name: '', type: 'uint256' }],
+              stateMutability: 'view',
+              type: 'function'
+            }
+          ] as const,
+          functionName: 'allowance',
+          args: [address, RNS_BULK_MANAGER_ADDRESS]
+        }),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Allowance check timeout')), 30000)
+        )
+      ]);
+      console.log('Current allowance:', currentAllowance.toString());
+    } catch (error) {
+      console.error('Failed to check allowance:', error);
+      throw new Error(`Failed to check token allowance: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
 
     // Approve tokens if allowance is insufficient
     if (currentAllowance < totalCost) {
@@ -110,31 +133,71 @@ export function useRNSBulkManager() {
     }
 
     // Write the contract transaction
-    // Note: writeContract is async and will trigger wallet popup
-    // It returns a promise that resolves when user confirms in wallet
+    // Use walletClient.writeContract for consistency with approval flow
+    // This gives us better control and ensures wallet popup appears
+    if (!walletClient) {
+      throw new Error('Wallet client not available');
+    }
+    
     console.log('Calling writeContract for bulkRegister...', {
       address: RNS_BULK_MANAGER_ADDRESS,
-      requestCount: requests.length
+      requestCount: requests.length,
+      requests: requests.map(r => ({ name: r.name, duration: r.duration.toString() }))
     });
     
     toast.info("Please confirm the registration transaction in your wallet...");
     
     try {
-      await writeContract({
-        address: RNS_BULK_MANAGER_ADDRESS,
-        abi: RNS_BULK_MANAGER_ABI,
-        functionName: 'bulkRegister',
-        args: [requests],
-      });
+      // Use walletClient.writeContract - this will trigger wallet popup immediately
+      console.log('About to call walletClient.writeContract - wallet popup should appear now...');
       
-      console.log('writeContract call completed. Transaction hash:', hash);
+      const txHash = await Promise.race([
+        walletClient.writeContract({
+          address: RNS_BULK_MANAGER_ADDRESS,
+          abi: RNS_BULK_MANAGER_ABI,
+          functionName: 'bulkRegister',
+          args: [requests],
+        }),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Transaction request timeout - wallet popup may not have appeared')), 60000)
+        )
+      ]);
       
-      // The transaction hash is stored in the hook's `hash` state
-      // useWaitForTransactionReceipt will handle waiting for confirmation
-      // Domains are registered through the official FIFS registrar, so they should appear in the official RNS registry
-    } catch (writeError) {
+      console.log('Transaction submitted. Hash:', txHash);
+      
+      // Update the hash in the hook's state by calling the hook's writeContract
+      // This ensures useWaitForTransactionReceipt can track it
+      // Actually, we can't directly update the hook's state, but we can use the returned hash
+      // The hook's useWaitForTransactionReceipt will work with any hash
+      
+      // Store the hash so the component can track it
+      // Note: The hook's hash state won't be updated, but we can work with the returned hash
+      
+      toast.success("Transaction submitted! Waiting for confirmation...");
+      
+      // Wait for transaction receipt
+      console.log('Waiting for transaction confirmation...');
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+      console.log('Transaction confirmed!');
+      
+    } catch (writeError: any) {
       // If writeContract fails, it might be because user rejected or there's an error
       console.error('writeContract error:', writeError);
+      
+      // Check if it's a user rejection
+      if (writeError?.message?.includes('User rejected') || 
+          writeError?.message?.includes('denied') ||
+          writeError?.code === 4001 ||
+          writeError?.shortMessage?.includes('User rejected') ||
+          writeError?.shortMessage?.includes('denied')) {
+        throw new Error('Transaction was cancelled by user');
+      }
+      
+      // Check if it's a timeout
+      if (writeError?.message?.includes('timeout')) {
+        throw new Error('Transaction request timed out. Please check your wallet connection and try again.');
+      }
+      
       throw writeError;
     }
   };

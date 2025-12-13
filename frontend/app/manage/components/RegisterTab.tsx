@@ -476,12 +476,40 @@ export default function RegisterTab() {
       // 1. Check allowance
       // 2. Approve if needed (wallet popup #1)
       // 3. Call writeContract (wallet popup #2)
+      // 4. Wait for transaction confirmation
       await bulkRegister(requests);
 
-      // Note: Don't clear state here - wait for transaction confirmation
-      // The useEffect will handle clearing state when isConfirmed is true
+      // Transaction is now confirmed
+      const registeredCount = domains.length;
       
-      toast.info(`Transaction submitted! Please confirm in your wallet to register ${domains.length} domain${domains.length > 1 ? 's' : ''}.`);
+      // Store registered domain names for the useEffect
+      const registeredNames = domains
+        .filter(d => d.name.trim())
+        .map(d => d.name.toLowerCase().trim());
+      setRecentlyRegistered(prev => {
+        const newSet = new Set(prev);
+        registeredNames.forEach(name => newSet.add(name));
+        return newSet;
+      });
+      
+      // Reset state
+      setIsProcessing(false);
+      
+      // Clear commit results and countdown
+      setCommitResults([]);
+      setCountdown(null);
+      setIsWaitingForReveal(false);
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+      }
+      
+      // Clear domain inputs
+      setDomains([{ name: '', duration: '1', isAvailable: null, isChecking: false, price: BigInt(0) }]);
+      
+      toast.success(`Successfully registered ${registeredCount} domain${registeredCount > 1 ? 's' : ''}!`);
+      
+      // Refetch domains to show newly registered ones
+      refetchDomains();
     } catch (error) {
       console.error("Registration failed:", error);
       

@@ -1,5 +1,5 @@
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
-import { keccak256, toBytes, randomBytes } from 'viem';
+import { keccak256, toBytes, bytesToHex } from 'viem';
 
 // RNS Contract addresses for testnet
 const FIFS_REGISTRAR_TESTNET = '0x90734bd6bf96250a7b262e2bc34284b0d47c1e8d' as `0x${string}`;
@@ -50,10 +50,13 @@ export function useRNSRegistrar() {
   const { data: walletClient } = useWalletClient();
 
   /**
-   * Generate a random secret (32 bytes)
+   * Generate a random secret (32 bytes) using Web Crypto API (browser-compatible)
    */
   const generateSecret = (): `0x${string}` => {
-    return randomBytes(32);
+    // Use Web Crypto API for browser compatibility
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    return bytesToHex(array) as `0x${string}`;
   };
 
   /**

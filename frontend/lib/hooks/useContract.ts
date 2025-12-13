@@ -1,4 +1,4 @@
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from 'wagmi';
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useWalletClient } from 'wagmi';
 import { RNS_BULK_MANAGER_ADDRESS, RNS_BULK_MANAGER_ABI } from '@/lib/abi';
 import { namehash } from 'viem';
 
@@ -6,6 +6,7 @@ export function useRNSBulkManager() {
   const { address, isConnected } = useAccount();
   const { writeContract, data: hash, isPending, error, reset } = useWriteContract();
   const publicClient = usePublicClient();
+  const { data: walletClient } = useWalletClient();
 
   const { isLoading: isConfirming, isSuccess: isConfirmed } = 
     useWaitForTransactionReceipt({ hash });
@@ -25,6 +26,68 @@ export function useRNSBulkManager() {
   const bulkRegister = async (requests: Array<{ name: string; owner: `0x${string}`; secret: `0x${string}`; duration: bigint; addr: `0x${string}` }>) => {
     if (!isConnected || !address) {
       throw new Error('Wallet not connected');
+    }
+
+    if (!publicClient) {
+      throw new Error('Public client not available');
+    }
+
+    // RIF Token address on testnet
+    const RIF_TOKEN = '0x19f64674d8a5b4e652319f5e239efd3bc969a1fe' as `0x${string}`;
+
+    // Calculate total cost first
+    const names = requests.map(r => r.name);
+    const durations = requests.map(r => r.duration);
+    const totalCost = await calculateRegistrationCost(names, durations);
+
+    // Check current allowance
+    const currentAllowance = await publicClient.readContract({
+      address: RIF_TOKEN,
+      abi: [
+        {
+          inputs: [
+            { name: 'owner', type: 'address' },
+            { name: 'spender', type: 'address' }
+          ],
+          name: 'allowance',
+          outputs: [{ name: '', type: 'uint256' }],
+          stateMutability: 'view',
+          type: 'function'
+        }
+      ] as const,
+      functionName: 'allowance',
+      args: [address, RNS_BULK_MANAGER_ADDRESS]
+    });
+
+    // Approve tokens if allowance is insufficient
+    if (currentAllowance < totalCost) {
+      if (!walletClient) {
+        throw new Error('Wallet client not available');
+      }
+
+      // Approve a bit more than needed to avoid frequent approvals
+      const approveAmount = totalCost * BigInt(2); // Approve 2x the cost for future registrations
+      
+      const approveHash = await walletClient.writeContract({
+        address: RIF_TOKEN,
+        abi: [
+          {
+            inputs: [
+              { name: 'spender', type: 'address' },
+              { name: 'amount', type: 'uint256' }
+            ],
+            name: 'approve',
+            outputs: [{ name: '', type: 'bool' }],
+            stateMutability: 'nonpayable',
+            type: 'function'
+          }
+        ] as const,
+        functionName: 'approve',
+        args: [RNS_BULK_MANAGER_ADDRESS, approveAmount]
+      });
+
+      // Wait for approval transaction to be confirmed
+      await publicClient.waitForTransactionReceipt({ hash: approveHash });
     }
 
     // Write the contract transaction

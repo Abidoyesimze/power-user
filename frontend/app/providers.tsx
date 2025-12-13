@@ -20,9 +20,10 @@ const rskTestnet = defineChain({
   },
   rpcUrls: {
     default: {
-      // Use RPC URL from env or fallback to dRPC (free, reliable, supports eth_getLogs)
+      // Use RPC URL from env or fallback to PublicNode (supports eth_getLogs)
+      // Note: dRPC doesn't support eth_getLogs, so we use PublicNode as fallback
       http: [
-        process.env.NEXT_PUBLIC_RPC_URL || "https://rootstock-testnet.drpc.org"
+        process.env.NEXT_PUBLIC_RPC_URL || "https://rsk-testnet.publicnode.com"
       ],
     },
   },

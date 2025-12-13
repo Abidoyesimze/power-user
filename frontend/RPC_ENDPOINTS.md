@@ -2,22 +2,31 @@
 
 ## Recommended Endpoints (in order of preference)
 
-### 1. dRPC (Recommended - Free & Reliable)
-```
-https://rootstock-testnet.drpc.org
-```
-- ✅ Free
-- ✅ Reliable
-- ✅ Supports eth_getLogs
-- ✅ No API key required
-
-### 2. PublicNode (Free Alternative)
+### 1. PublicNode (Recommended - Free & Supports eth_getLogs)
 ```
 https://rsk-testnet.publicnode.com
 ```
 - ✅ Free
 - ✅ No API key required
+- ✅ Supports eth_getLogs (required for domain events)
 - ✅ Good uptime
+
+### 2. Rootstock Portal API (Requires API Key - Best for Production)
+```
+https://rpc.testnet.rootstock.io/YOUR_API_KEY
+```
+- ✅ Official endpoint
+- ✅ Supports eth_getLogs
+- ✅ Most reliable
+- ⚠️ Requires API key from https://portal.rootstock.io/
+
+### 3. dRPC (Free but Limited)
+```
+https://rootstock-testnet.drpc.org
+```
+- ✅ Free
+- ❌ Does NOT support eth_getLogs (will fail for domain queries)
+- ⚠️ Use only if you don't need event logs
 
 ### 3. Rootstock Portal API (Requires API Key)
 ```

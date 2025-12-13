@@ -1,6 +1,7 @@
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useWalletClient } from 'wagmi';
 import { RNS_BULK_MANAGER_ADDRESS, RNS_BULK_MANAGER_ABI } from '@/lib/abi';
 import { namehash } from 'viem';
+import { toast } from 'react-toastify';
 
 export function useRNSBulkManager() {
   const { address, isConnected } = useAccount();

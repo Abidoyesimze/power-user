@@ -32,3 +32,8 @@ Our contract (`RNSBulkManager`) includes:
 - `smartcontract/FIFS_REGISTRAR_PRICE_ISSUE.md` - Detailed analysis
 - `smartcontract/contracts/RNSBulkManager.sol` - Workaround implementation
 
+
+
+
+
+

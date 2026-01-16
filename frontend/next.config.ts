@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: path.resolve(__dirname),
   
   // Suppress module resolution warnings for optional dependencies
-  webpack: (config, { isServer }) => {
+  webpack: (config) => {
     // Ignore optional dependencies that cause warnings
     config.resolve.fallback = {
       ...config.resolve.fallback,

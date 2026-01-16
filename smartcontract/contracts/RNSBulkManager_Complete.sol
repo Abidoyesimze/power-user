@@ -2,16 +2,16 @@
 pragma solidity ^0.8.20;
 
 import "./interfaces/IRNS.sol";
-import "./interfaces/IRSKOwner.sol";
+import "./interfaces/IRSKOwnerImprove.sol";
 import "./interfaces/IAddrResolver.sol";
 import "./interfaces/IFIFSRegistrar.sol";
 import "./interfaces/IRenewer.sol";
 import "./interfaces/IERC20.sol";
 
 /**
- * @title RNSBulkManager
- * @dev Multicall contract for batch operations on RNS domains
- * Enables users to register, renew, and update multiple domains in a single transaction
+ * @title RNSBulkManager - Complete
+ * @dev Enhanced multicall contract for batch RNS domain operations with proper availability checking
+ * Includes all original functions plus improved availability verification
  */
 contract RNSBulkManager {
     // RNS Contract Addresses
@@ -28,6 +28,7 @@ contract RNSBulkManager {
     event BulkAddressUpdate(address indexed user, uint256 count);
     event BulkMultiChainAddressUpdate(address indexed user, uint256 count);
     event OperationFailed(uint256 indexed index, string reason);
+    event DomainAvailabilityChecked(string indexed name, bool available);
     
     // Structs for batch operations
     struct RegistrationRequest {
@@ -35,13 +36,13 @@ contract RNSBulkManager {
         address owner;
         bytes32 secret;
         uint256 duration;
-        address addr; // Address to set for the domain after registration
+        address addr;
     }
     
     struct RenewalRequest {
         string name;
         uint256 duration;
-        uint256 expires; // Current expiration timestamp (use 0 if unknown, contract may handle it)
+        uint256 expires;
     }
     
     struct AddressUpdateRequest {
@@ -54,17 +55,11 @@ contract RNSBulkManager {
         uint256 duration;
     }
     
-    // Result struct for partial failure tracking
     struct OperationResult {
         bool success;
         uint256 index;
         string errorMessage;
     }
-    
-    // Fixed price per year (workaround for FIFS registrar bug on testnet)
-    // The registrar returns duration + 2 RIF, making long durations impossible
-    // We use a fixed reasonable price: 0.1 RIF per year
-    uint256 public constant PRICE_PER_YEAR = 1 * 10**17; // 0.1 RIF in wei
     
     struct MultiChainAddressUpdate {
         bytes32 node;
@@ -72,8 +67,11 @@ contract RNSBulkManager {
         bytes targetAddress;
     }
     
+    // Fixed price per year
+    uint256 public constant PRICE_PER_YEAR = 1 * 10**17; // 0.1 RIF in wei
+    
     /**
-     * @dev Constructor - Initialize with RNS contract addresses
+     * @dev Constructor
      */
     constructor(
         address _rnsRegistry,
@@ -99,9 +97,86 @@ contract RNSBulkManager {
     }
     
     /**
-     * @dev Bulk register multiple domains
-     * @param requests Array of registration requests
-     * @return results Array of operation results (success/failure for each domain)
+     * @dev CRITICAL: Check if a domain is available for registration
+     * A domain is available if:
+     * 1. It doesn't have an owner in the RNS registry (address(0))
+     * 2. It doesn't have an active registration in RSKOwner (not expired)
+     * 
+     * @param name Domain name (without .rsk suffix)
+     * @return available True if domain can be registered
+     */
+    function isDomainAvailable(string calldata name) public view returns (bool available) {
+        // Calculate the label hash (keccak256 of the name)
+        bytes32 label = keccak256(bytes(name));
+        
+        // Calculate the namehash for name.rsk
+        // namehash(name.rsk) = keccak256(namehash("rsk"), label)
+        bytes32 rskNode = keccak256(abi.encodePacked(bytes32(0x0), keccak256("rsk")));
+        bytes32 node = keccak256(abi.encodePacked(rskNode, label));
+        
+        // Method 1: Check RNS Registry owner
+        address registryOwner;
+        try rnsRegistry.owner(node) returns (address owner) {
+            registryOwner = owner;
+        } catch {
+            // If call fails, assume domain doesn't exist (available)
+            return true;
+        }
+        
+        // If registry owner is address(0), domain might be available
+        // But we need to check RSKOwner as well (for expiration)
+        if (registryOwner == address(0)) {
+            return true;
+        }
+        
+        // Method 2: Check RSKOwner expiration
+        // RSKOwner uses tokenId = uint256(label) to track ownership
+        uint256 tokenId = uint256(label);
+        
+        try rskOwner.ownerOf(tokenId) returns (address) {
+            // If ownerOf succeeds, domain has an active owner
+            // Check if it's expired by trying to get expiration time
+            try rskOwner.expirationTime(tokenId) returns (uint256 expiry) {
+                // Domain is available if expired
+                return expiry < block.timestamp;
+            } catch {
+                // If can't get expiration, assume not available
+                return false;
+            }
+        } catch {
+            // If ownerOf fails, domain doesn't have an active NFT owner
+            // Double-check registry owner
+            if (registryOwner == address(0)) {
+                return true;
+            } else {
+                // Registry has owner but RSKOwner doesn't - unusual state
+                // To be safe, consider unavailable
+                return false;
+            }
+        }
+    }
+    
+    /**
+     * @dev Batch check availability for multiple domains
+     * @param names Array of domain names (without .rsk)
+     * @return availability Array of booleans indicating availability
+     */
+    function checkBulkAvailability(string[] calldata names) 
+        external 
+        view 
+        returns (bool[] memory availability) 
+    {
+        availability = new bool[](names.length);
+        
+        for (uint256 i = 0; i < names.length; i++) {
+            availability[i] = isDomainAvailable(names[i]);
+        }
+        
+        return availability;
+    }
+    
+    /**
+     * @dev Bulk register multiple domains with availability pre-check
      */
     function bulkRegister(RegistrationRequest[] calldata requests) 
         external 
@@ -114,17 +189,24 @@ contract RNSBulkManager {
         uint256 successCount = 0;
         uint256 totalCost = 0;
         
-        // Calculate total cost using fixed price
-        // WORKAROUND: FIFS registrar on testnet has a bug where it returns duration + 2 RIF
-        // For long durations (years), this makes registration impossible
-        // We use a fixed reasonable price: 0.1 RIF per year
+        // PRE-CHECK: Verify all domains are available before processing
         for (uint256 i = 0; i < requests.length; i++) {
-            // Convert duration (seconds) to years and calculate price
-            // 1 year = 31536000 seconds
-            uint256 durationInYears = (requests[i].duration * 100) / 31536000; // Multiply by 100 for precision
-            uint256 cost = (PRICE_PER_YEAR * durationInYears) / 100; // Divide by 100 to get final price
+            bool available = isDomainAvailable(requests[i].name);
             
-            // Minimum price: 0.01 RIF (for durations less than 1 year)
+            if (!available) {
+                results[i] = OperationResult(
+                    false, 
+                    i, 
+                    "Domain already registered or unavailable"
+                );
+                emit OperationFailed(i, "Domain already registered or unavailable");
+                continue;
+            }
+            
+            // Calculate cost for available domains
+            uint256 durationInYears = (requests[i].duration * 100) / 31536000;
+            uint256 cost = (PRICE_PER_YEAR * durationInYears) / 100;
+            
             if (cost < 1 * 10**16) {
                 cost = 1 * 10**16; // 0.01 RIF minimum
             }
@@ -132,30 +214,25 @@ contract RNSBulkManager {
             totalCost += cost;
         }
         
-        // If all registrations failed due to price issues, revert with clear message
-        if (totalCost == 0) {
-            revert("All registrations failed: Unable to calculate price");
-        }
+        // If no domains are available, revert
+        require(totalCost > 0, "No domains available for registration");
         
-        // Transfer total RIF tokens from user to this contract
+        // Transfer total RIF tokens
         require(
             rifToken.transferFrom(msg.sender, address(this), totalCost),
             "RIF token transfer failed"
         );
         
-        // Approve registrar to spend tokens
+        // Approve registrar
         rifToken.approve(address(fifsRegistrar), totalCost);
         
-        // Process each registration
-        // FIFS registrar uses commit-reveal scheme with 60 second minCommitmentAge
-        // Users must commit first (via frontend or bulkCommit), wait 60 seconds, then call this function
-        // This function will register domains using the secrets from the commit phase
+        // Process registrations
         for (uint256 i = 0; i < requests.length; i++) {
-            // Try to register using the provided secret
-            // This will work if:
-            // 1. Commitment was made in a previous transaction (frontend handles this)
-            // 2. minCommitmentAge (60 seconds) has passed (frontend handles this)
-            // 3. Commitment matches the registration parameters (secret, name, owner)
+            // Skip domains that failed pre-check
+            if (!results[i].success && bytes(results[i].errorMessage).length > 0) {
+                continue;
+            }
+            
             try fifsRegistrar.register(
                 requests[i].name,
                 requests[i].owner,
@@ -166,7 +243,6 @@ contract RNSBulkManager {
                 results[i] = OperationResult(true, i, "");
                 successCount++;
             } catch Error(string memory reason) {
-                // Check if error is about commitment
                 if (keccak256(bytes(reason)) == keccak256(bytes("No commitment found")) || 
                     keccak256(bytes(reason)) == keccak256(bytes("Commitment too new"))) {
                     results[i] = OperationResult(
@@ -174,7 +250,7 @@ contract RNSBulkManager {
                         i, 
                         "Commitment required: Commit first, wait 60 seconds, then register"
                     );
-                    emit OperationFailed(i, "Commitment required: Commit first, wait 60 seconds, then register");
+                    emit OperationFailed(i, "Commitment required");
                 } else {
                     results[i] = OperationResult(false, i, reason);
                     emit OperationFailed(i, reason);
@@ -191,11 +267,7 @@ contract RNSBulkManager {
     }
     
     /**
-     * @dev Bulk commit domains for registration (required before bulkRegister)
-     * FIFS registrar uses commit-reveal scheme with 60 second minCommitmentAge
-     * Users must call this first, wait 60 seconds, then call bulkRegister
-     * @param requests Array of registration requests (same format as bulkRegister)
-     * @return results Array of operation results
+     * @dev Bulk commit domains for registration
      */
     function bulkCommit(RegistrationRequest[] calldata requests) 
         external 
@@ -207,20 +279,29 @@ contract RNSBulkManager {
         results = new OperationResult[](requests.length);
         uint256 successCount = 0;
         
+        // PRE-CHECK: Verify domains are available before committing
         for (uint256 i = 0; i < requests.length; i++) {
-            // Create commitment hash using FIFS registrar's makeCommitment function
-            // Commitment = keccak256(keccak256(name), owner, secret)
+            bool available = isDomainAvailable(requests[i].name);
+            
+            if (!available) {
+                results[i] = OperationResult(
+                    false, 
+                    i, 
+                    "Domain already registered - cannot commit"
+                );
+                emit OperationFailed(i, "Domain already registered");
+                continue;
+            }
+            
             bytes32 label = keccak256(bytes(requests[i].name));
             bytes32 commitment;
             
             try fifsRegistrar.makeCommitment(label, requests[i].owner, requests[i].secret) returns (bytes32 registrarCommitment) {
                 commitment = registrarCommitment;
             } catch {
-                // Fallback: calculate commitment manually if makeCommitment fails
                 commitment = keccak256(abi.encodePacked(label, requests[i].owner, requests[i].secret));
             }
             
-            // Commit the commitment
             try fifsRegistrar.commit(commitment) {
                 results[i] = OperationResult(true, i, "");
                 successCount++;
@@ -344,7 +425,7 @@ contract RNSBulkManager {
         uint256 successCount = 0;
         
         for (uint256 i = 0; i < requests.length; i++) {
-            // Verify caller is the owner of the domain - use try-catch to allow partial failures
+            // Verify caller is the owner of the domain
             address owner;
             try rnsRegistry.owner(requests[i].node) returns (address domainOwner) {
                 owner = domainOwner;
@@ -354,7 +435,6 @@ contract RNSBulkManager {
                 continue;
             }
             
-            // Check ownership without reverting on failure
             if (owner != msg.sender) {
                 results[i] = OperationResult(false, i, "Not domain owner");
                 emit OperationFailed(i, "Not domain owner");
@@ -397,7 +477,7 @@ contract RNSBulkManager {
         uint256 successCount = 0;
         
         for (uint256 i = 0; i < nodes.length; i++) {
-            // Verify ownership without reverting on failure
+            // Verify ownership
             address owner;
             try rnsRegistry.owner(nodes[i]) returns (address domainOwner) {
                 owner = domainOwner;
@@ -427,56 +507,6 @@ contract RNSBulkManager {
         }
         
         return results;
-    }
-    
-    /**
-     * @dev Helper function to calculate total cost for registrations
-     * @param names Array of domain names
-     * @param durations Array of durations (must match names length)
-     * @return totalCost Total cost in RIF tokens
-     */
-    function calculateRegistrationCost(
-        string[] calldata names,
-        uint256[] calldata durations
-    ) external pure returns (uint256 totalCost) {
-        require(names.length == durations.length, "Array length mismatch");
-        
-        // Use fixed price: 0.1 RIF per year (workaround for FIFS registrar bug)
-        for (uint256 i = 0; i < names.length; i++) {
-            // Convert duration (seconds) to years and calculate price
-            uint256 durationInYears = (durations[i] * 100) / 31536000;
-            uint256 cost = (PRICE_PER_YEAR * durationInYears) / 100;
-            
-            // Minimum price: 0.01 RIF (for durations less than 1 year)
-            if (cost < 1 * 10**16) {
-                cost = 1 * 10**16; // 0.01 RIF minimum
-            }
-            
-            totalCost += cost;
-        }
-        
-        return totalCost;
-    }
-    
-    /**
-     * @dev Helper function to calculate total renewal cost
-     * @param names Array of domain names
-     * @param durations Array of durations
-     * @return totalCost Total cost in RIF tokens
-     */
-    function calculateRenewalCost(
-        string[] calldata names,
-        uint256[] calldata expires,
-        uint256[] calldata durations
-    ) external view returns (uint256 totalCost) {
-        require(names.length == durations.length, "Array length mismatch");
-        require(names.length == expires.length, "Array length mismatch");
-        
-        for (uint256 i = 0; i < names.length; i++) {
-            totalCost += renewer.price(names[i], expires[i], durations[i]);
-        }
-        
-        return totalCost;
     }
     
     /**
@@ -535,11 +565,10 @@ contract RNSBulkManager {
     
     /**
      * @dev Generic multicall for combining multiple operations in one transaction
-     * Continues on individual call failures to allow partial success
      * @param targets Array of contract addresses
      * @param callDatas Array of encoded function calls
      * @return successes Array indicating which calls succeeded
-     * @return results Array of call results (empty bytes on failure, returnData on success)
+     * @return results Array of call results
      */
     function multicall(address[] calldata targets, bytes[] calldata callDatas)
         external
@@ -582,11 +611,84 @@ contract RNSBulkManager {
     }
     
     /**
+     * @dev Helper function to calculate total cost for registrations
+     * @param names Array of domain names
+     * @param durations Array of durations (must match names length)
+     * @return totalCost Total cost in RIF tokens
+     */
+    function calculateRegistrationCost(
+        string[] calldata names,
+        uint256[] calldata durations
+    ) external pure returns (uint256 totalCost) {
+        require(names.length == durations.length, "Array length mismatch");
+        
+        for (uint256 i = 0; i < names.length; i++) {
+            uint256 durationInYears = (durations[i] * 100) / 31536000;
+            uint256 cost = (PRICE_PER_YEAR * durationInYears) / 100;
+            
+            if (cost < 1 * 10**16) {
+                cost = 1 * 10**16;
+            }
+            
+            totalCost += cost;
+        }
+        
+        return totalCost;
+    }
+    
+    /**
+     * @dev Helper function to calculate total renewal cost
+     * @param names Array of domain names
+     * @param expires Array of expiration timestamps
+     * @param durations Array of durations
+     * @return totalCost Total cost in RIF tokens
+     */
+    function calculateRenewalCost(
+        string[] calldata names,
+        uint256[] calldata expires,
+        uint256[] calldata durations
+    ) external view returns (uint256 totalCost) {
+        require(names.length == durations.length, "Array length mismatch");
+        require(names.length == expires.length, "Array length mismatch");
+        
+        for (uint256 i = 0; i < names.length; i++) {
+            totalCost += renewer.price(names[i], expires[i], durations[i]);
+        }
+        
+        return totalCost;
+    }
+    
+    /**
      * @dev Emergency function to recover stuck tokens
      * Only callable by token owner if tokens get stuck
      */
     function recoverTokens(address tokenAddress, uint256 amount) external {
         require(tokenAddress != address(0), "Invalid token address");
         IERC20(tokenAddress).transfer(msg.sender, amount);
+    }
+    
+    /**
+     * @dev Get domain owner from RNS Registry
+     */
+    function getDomainOwner(string calldata name) external view returns (address) {
+        bytes32 label = keccak256(bytes(name));
+        bytes32 rskNode = keccak256(abi.encodePacked(bytes32(0x0), keccak256("rsk")));
+        bytes32 node = keccak256(abi.encodePacked(rskNode, label));
+        
+        return rnsRegistry.owner(node);
+    }
+    
+    /**
+     * @dev Get domain expiration time from RSKOwner
+     */
+    function getDomainExpiration(string calldata name) external view returns (uint256) {
+        bytes32 label = keccak256(bytes(name));
+        uint256 tokenId = uint256(label);
+        
+        try rskOwner.expirationTime(tokenId) returns (uint256 expiry) {
+            return expiry;
+        } catch {
+            return 0;
+        }
     }
 }

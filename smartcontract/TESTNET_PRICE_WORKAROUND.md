@@ -88,3 +88,8 @@ npx hardhat run scripts/debug-registration.ts --network rskTestnet
 
 Expected: ~0.1 RIF instead of 31.5M RIF
 
+
+
+
+
+

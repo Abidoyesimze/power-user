@@ -77,3 +77,8 @@ durations (uint256[]): [31536000]
 
 This will return the total cost for registering the domain.
 
+
+
+
+
+

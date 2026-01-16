@@ -123,3 +123,8 @@ After implementing the fix, the verification script should show:
 - Testnet FIFS Registrar: `0x90734bd6bf96250a7b262e2bc34284b0d47c1e8d`
 
 
+
+
+
+
+

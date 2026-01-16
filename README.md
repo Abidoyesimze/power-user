@@ -2,7 +2,7 @@
 
 **Manage all your Rootstock domains from one place. Register, renew, and update in bulk to save on gas fees.**
 
-[🌐 Live App](https://power-user-mu.vercel.app/) | [📄 Smart Contract](https://explorer.testnet.rootstock.io/address/0xbf1b2ca2cc17bd98679d584575d549c62b3214eb) | [🔧 GitHub](https://github.com/Abidoyesimze/power-user)
+[🌐 Live App](https://power-user-mu.vercel.app/) | [📄 Smart Contract](https://explorer.testnet.rootstock.io/address/0x1ed36feb312b9d464d95fc1bab4b286ddc793341) | [🔧 GitHub](https://github.com/Abidoyesimze/power-user)
 
 ---
 
@@ -118,9 +118,9 @@ Running a decentralized organization with many domains? Centralize domain manage
 The entire project is open source. Check out the GitHub repository to see the code, contribute improvements, or fork it for your own use.
 
 **Smart Contract Address (Testnet):**
-`0xbf1b2ca2cc17bd98679d584575d549c62b3214eb`
+`0x1ed36feb312b9d464d95fc1bab4b286ddc793341`
 
-View it on the [Rootstock Explorer](https://explorer.testnet.rootstock.io/address/0xbf1b2ca2cc17bd98679d584575d549c62b3214eb).
+View it on the [Rootstock Explorer](https://explorer.testnet.rootstock.io/address/0x1ed36feb312b9d464d95fc1bab4b286ddc793341).
 
 ## Understanding the Savings
 

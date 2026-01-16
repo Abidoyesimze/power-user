@@ -96,3 +96,8 @@ const requests = domains.map((name, index) => ({
 
 The frontend is fully integrated and ready to interact with the updated contract on RSK Testnet.
 
+
+
+
+
+

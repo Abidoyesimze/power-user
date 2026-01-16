@@ -106,3 +106,8 @@ If user registers `mysite` through our platform:
 
 **YES** - Domains registered through our Bulk Manager platform are **fully registered in the official RNS system** and will show as unavailable on the official RNS platform when someone searches for them.
 
+
+
+
+
+

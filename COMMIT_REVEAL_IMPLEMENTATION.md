@@ -152,3 +152,8 @@ User clicks "Register"
   - Same commit-reveal flow
   - Just using viem instead of ethers.js
 
+
+
+
+
+

@@ -7,7 +7,7 @@ import { RNS_BULK_MANAGER_ABI } from "@/lib/abi";
 
 // Contract addresses on testnet
 const RNS_REGISTRY = "0x7d284aaac6e925aad802a53c0c69efe3764597b8" as Address;
-const RNS_BULK_MANAGER = "0x6621e4f2fc0761ab31d1b89babef2be0a83901ab" as Address;
+const RNS_BULK_MANAGER = "0x1ed36feb312b9d464d95fc1bab4b286ddc793341" as Address;
 
 interface Domain {
   id: string;

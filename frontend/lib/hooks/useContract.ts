@@ -1,6 +1,6 @@
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useWalletClient } from 'wagmi';
 import { RNS_BULK_MANAGER_ADDRESS, RNS_BULK_MANAGER_ABI } from '@/lib/abi';
-import { namehash } from 'viem';
+import { namehash, keccak256, toBytes } from 'viem';
 import { toast } from 'react-toastify';
 
 export function useRNSBulkManager() {
@@ -180,21 +180,25 @@ export function useRNSBulkManager() {
       await publicClient.waitForTransactionReceipt({ hash: txHash });
       console.log('Transaction confirmed!');
       
-    } catch (writeError: any) {
+    } catch (writeError: unknown) {
       // If writeContract fails, it might be because user rejected or there's an error
       console.error('writeContract error:', writeError);
       
       // Check if it's a user rejection
-      if (writeError?.message?.includes('User rejected') || 
-          writeError?.message?.includes('denied') ||
-          writeError?.code === 4001 ||
-          writeError?.shortMessage?.includes('User rejected') ||
-          writeError?.shortMessage?.includes('denied')) {
+      const errorMessage = writeError instanceof Error ? writeError.message : String(writeError);
+      const errorCode = (writeError as { code?: number })?.code;
+      const errorShortMessage = (writeError as { shortMessage?: string })?.shortMessage;
+      
+      if (errorMessage.includes('User rejected') || 
+          errorMessage.includes('denied') ||
+          errorCode === 4001 ||
+          errorShortMessage?.includes('User rejected') ||
+          errorShortMessage?.includes('denied')) {
         throw new Error('Transaction was cancelled by user');
       }
       
       // Check if it's a timeout
-      if (writeError?.message?.includes('timeout')) {
+      if (errorMessage.includes('timeout')) {
         throw new Error('Transaction request timed out. Please check your wallet connection and try again.');
       }
       
@@ -285,68 +289,64 @@ export function useRNSBulkManager() {
     return result as bigint;
   };
 
+  /**
+   * CRITICAL: Check if a domain is available for registration
+   * Uses contract's isDomainAvailable function (which checks both RNS Registry and RSKOwner)
+   * Falls back to manual checking if contract call fails
+   */
   const checkAvailability = async (name: string): Promise<boolean> => {
     if (!publicClient) {
       throw new Error('Public client not available');
     }
 
     try {
-      // Normalize domain name (without .rsk for FIFS registrar)
-      // FIFS registrar expects domain names WITHOUT the .rsk suffix
+      // Remove .rsk suffix if present (contract expects name without .rsk)
       const domainName = name.toLowerCase().trim().replace(/\.rsk$/i, '');
-      const normalizedName = `${domainName}.rsk`;
-      const RNS_REGISTRY = "0x7d284aaac6e925aad802a53c0c69efe3764597b8" as const;
-      const node = namehash(normalizedName);
       
-      // Strategy: Check BOTH FIFS registrar AND registry owner
-      // A domain is unavailable if:
-      // 1. FIFS registrar says it's not available, OR
-      // 2. Registry owner is not zero address
-      // This ensures we catch all registered domains
-      
-      let fifsAvailable: boolean | null = null;
-      let registryOwner: string | null = null;
-      
-      // Step 1: Check FIFS registrar availability
+      // PRIMARY: Use contract's isDomainAvailable function
+      // This is more reliable as it matches the contract's logic exactly
       try {
-        const fifsRegistrarAddress = await publicClient.readContract({
+        const available = await publicClient.readContract({
           address: RNS_BULK_MANAGER_ADDRESS,
           abi: RNS_BULK_MANAGER_ABI,
-          functionName: 'fifsRegistrar',
+          functionName: 'isDomainAvailable',
+          args: [domainName],
         });
-
-        try {
-          const available = await publicClient.readContract({
-            address: fifsRegistrarAddress as `0x${string}`,
-            abi: [
-              {
-                inputs: [{ name: 'name', type: 'string' }],
-                name: 'available',
-                outputs: [{ name: '', type: 'bool' }],
-                stateMutability: 'view',
-                type: 'function',
-              },
-            ],
-            functionName: 'available',
-            args: [domainName],
-          });
-          fifsAvailable = available as boolean;
-        } catch (fifsCallError) {
-          // If FIFS registrar call reverts, the domain is NOT available
-          // FIFS registrar reverts for unavailable/invalid domains
-          // This is expected behavior - only log in debug mode
-          if (process.env.NODE_ENV === 'development') {
-            console.debug('FIFS registrar available() call reverted - domain is unavailable');
-          }
-          fifsAvailable = false; // Treat revert as unavailable
-        }
-      } catch (fifsError) {
-        console.warn('Could not get FIFS registrar address:', fifsError);
+        
+        return available as boolean;
+      } catch (contractError) {
+        console.warn('Contract availability check failed, falling back to manual check:', contractError);
+        // Fallback to manual checking if contract call fails
+        return manualAvailabilityCheck(domainName);
       }
+    } catch (error) {
+      console.error('Error checking availability:', error);
+      // If all checks fail, assume unavailable to be safe
+      return false;
+    }
+  };
+
+  /**
+   * Fallback manual availability check
+   * Directly checks RNS Registry and RSKOwner contracts
+   */
+  const manualAvailabilityCheck = async (domainName: string): Promise<boolean> => {
+    if (!publicClient) {
+      return false;
+    }
+
+    const RNS_REGISTRY = "0x7d284aaac6e925aad802a53c0c69efe3764597b8" as const;
+    const RSK_OWNER = "0xca0a477e19bac7e0e172ccfd2e3c28a7200bdb71" as const;
+    
+    try {
+      // Calculate namehash
+      const normalizedName = `${domainName}.rsk`;
+      const node = namehash(normalizedName);
+      const label = keccak256(toBytes(domainName));
       
-      // Step 2: Check registry owner (ALWAYS check this, even if FIFS check succeeded)
+      // Step 1: Check RNS Registry owner
       try {
-        const owner = await publicClient.readContract({
+        const registryOwner = await publicClient.readContract({
           address: RNS_REGISTRY,
           abi: [
             {
@@ -360,45 +360,96 @@ export function useRNSBulkManager() {
           functionName: 'owner',
           args: [node],
         });
-        registryOwner = owner as string;
-      } catch (registryError) {
-        console.error('Registry owner check failed:', registryError);
-      }
-      
-      // Step 3: Determine availability based on both checks
-      // Priority: Registry owner check is most reliable (especially on testnet)
-      // FIFS registrar is used as secondary confirmation
-      
-      // Domain is UNAVAILABLE if registry has a non-zero owner
-      if (registryOwner && registryOwner !== "0x0000000000000000000000000000000000000000") {
-        return false; // Domain is registered
-      }
-      
-      // If registry owner is zero, domain is likely available
-      // Use FIFS registrar as confirmation if available
-      if (registryOwner === "0x0000000000000000000000000000000000000000" || !registryOwner) {
-        // Registry says available - check FIFS for confirmation
-        if (fifsAvailable === true) {
-          return true; // Both registry and FIFS confirm available
-        }
         
-        // FIFS registrar reverted or returned false, but registry says available
-        // On testnet, FIFS registrar may have issues, so trust the registry
-        // If registry owner is zero, domain is available
-        if (fifsAvailable === false || fifsAvailable === null) {
-          // FIFS registrar has issues on testnet, but registry is reliable
-          // Trust the registry - if owner is zero, domain is available
+        // If registry owner is address(0), domain might be available
+        if (registryOwner === "0x0000000000000000000000000000000000000000") {
           return true;
         }
+      } catch (error) {
+        console.error('Error checking registry owner:', error);
+        // If registry check fails, continue to RSKOwner check
       }
       
-      // Default: if we can't determine, assume unavailable to be safe
+      // Step 2: Check RSKOwner NFT ownership and expiration
+      try {
+        const tokenId = BigInt(label);
+        
+        // Try to get owner - will revert if domain is available/expired
+        await publicClient.readContract({
+          address: RSK_OWNER,
+          abi: [
+            {
+              inputs: [{ name: 'tokenId', type: 'uint256' }],
+              name: 'ownerOf',
+              outputs: [{ name: 'owner', type: 'address' }],
+              stateMutability: 'view',
+              type: 'function',
+            },
+          ],
+          functionName: 'ownerOf',
+          args: [tokenId],
+        });
+        
+        // If ownerOf succeeds, check expiration
+        const expirationTime = await publicClient.readContract({
+          address: RSK_OWNER,
+          abi: [
+            {
+              inputs: [{ name: 'tokenId', type: 'uint256' }],
+              name: 'expirationTime',
+              outputs: [{ name: '', type: 'uint256' }],
+              stateMutability: 'view',
+              type: 'function',
+            },
+          ],
+          functionName: 'expirationTime',
+          args: [tokenId],
+        });
+        
+        const now = Math.floor(Date.now() / 1000);
+        const isExpired = Number(expirationTime) < now;
+        
+        return isExpired; // Available if expired
+      } catch {
+        // If ownerOf reverts, domain doesn't have an active NFT owner (available)
+        return true;
+      }
+    } catch {
+      console.error('Manual availability check failed');
       return false;
+    }
+  };
+
+  /**
+   * Batch check availability for multiple domains
+   * Uses contract's checkBulkAvailability function
+   */
+  const checkBulkAvailability = async (names: string[]): Promise<boolean[]> => {
+    if (!publicClient) {
+      throw new Error('Public client not available');
+    }
+
+    try {
+      // Remove .rsk suffix from all names
+      const cleanNames = names.map(n => n.toLowerCase().trim().replace(/\.rsk$/i, ''));
+      
+      const availability = await publicClient.readContract({
+        address: RNS_BULK_MANAGER_ADDRESS,
+        abi: RNS_BULK_MANAGER_ABI,
+        functionName: 'checkBulkAvailability',
+        args: [cleanNames],
+      });
+      
+      return availability as boolean[];
     } catch (error) {
-      console.error('Error checking availability:', error);
-      // If we can't check, assume it's unavailable to be safe
-      // This prevents false positives where domain shows available but registration fails
-      return false;
+      console.error('Error checking bulk availability:', error);
+      
+      // Fallback: Check each domain individually
+      const results = await Promise.all(
+        names.map(name => checkAvailability(name))
+      );
+      
+      return results;
     }
   };
 
@@ -412,6 +463,7 @@ export function useRNSBulkManager() {
     calculateRegistrationCost,
     calculateRenewalCost,
     checkAvailability,
+    checkBulkAvailability,
     nameToNode,
     hash,
     isPending,

@@ -3,7 +3,7 @@
  * Run with: npx tsx scripts/test-rpc.ts
  */
 
-import { createPublicClient, http, formatEther } from 'viem';
+import { createPublicClient, http } from 'viem';
 
 const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://rpc.testnet.rootstock.io/eB6SwV0sOgFuotmD35JzhuCqpnYf8W-T';
 
@@ -179,4 +179,3 @@ testRPC()
     console.error('Test script error:', error);
     process.exit(1);
   });
-

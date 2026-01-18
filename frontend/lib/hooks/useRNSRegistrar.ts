@@ -2,7 +2,11 @@ import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
 import { keccak256, toBytes, bytesToHex } from 'viem';
 
 // RNS Contract addresses for testnet
-const FIFS_REGISTRAR_TESTNET = '0x90734bd6bf96250a7b262e2bc34284b0d47c1e8d' as `0x${string}`;
+// CRITICAL: The ACTUALLY_FIXED contract uses Basic FIFS Registrar for registration,
+// so commits MUST go to the Basic FIFS Registrar (same one the contract uses)
+// The two registrars have separate commitment storage - they MUST match!
+const FIFS_REGISTRAR_TESTNET = '0x36ffda909f941950a552011f2c50569fda14a169' as `0x${string}`; // Basic FIFS - used for commits and registration
+const FIFS_ADDR_REGISTRAR_TESTNET = '0x90734bd6bf96250a7b262e2bc34284b0d47c1e8d' as `0x${string}`; // FIFS Addr (NOT used in ACTUALLY_FIXED contract)
 
 // FIFS Registrar ABI (minimal - only functions we need)
 const FIFS_REGISTRAR_ABI = [
@@ -80,7 +84,7 @@ export function useRNSRegistrar() {
 
     const labelHash = hashLabel(label);
 
-    // Call makeCommitment on the FIFS registrar
+    // Call makeCommitment on the Basic FIFS Registrar (same one ACTUALLY_FIXED contract uses)
     const commitment = await publicClient.readContract({
       address: FIFS_REGISTRAR_TESTNET,
       abi: FIFS_REGISTRAR_ABI,
@@ -114,7 +118,7 @@ export function useRNSRegistrar() {
       // Create commitment hash
       const commitmentHash = await makeCommitment(label, address, secret);
 
-      // Commit the commitment
+      // Commit the commitment to Basic FIFS Registrar (same one ACTUALLY_FIXED contract uses)
       const hash = await walletClient.writeContract({
         address: FIFS_REGISTRAR_TESTNET,
         abi: FIFS_REGISTRAR_ABI,

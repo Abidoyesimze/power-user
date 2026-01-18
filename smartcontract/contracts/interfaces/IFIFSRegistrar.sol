@@ -9,8 +9,10 @@ pragma solidity ^0.8.20;
  */
 interface IFIFSRegistrar {
     // Registration function - requires commit-reveal scheme
-    // addr parameter is the address to set for the domain after registration
-    function register(string memory name, address nameOwner, bytes32 secret, uint256 duration, address addr) external;
+    // VERIFIED: Basic FIFS Registrar has 4 parameters (NOT 5!)
+    // Function selector: 0x2bfcc031
+    // The addr parameter does NOT exist in Basic FIFS Registrar
+    function register(string memory name, address nameOwner, bytes32 secret, uint256 duration) external;
     
     // Commit-reveal functions
     function commit(bytes32 commitment) external;

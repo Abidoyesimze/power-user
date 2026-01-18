@@ -7,7 +7,7 @@ import { RNS_BULK_MANAGER_ABI } from "@/lib/abi";
 
 // Contract addresses on testnet
 const RNS_REGISTRY = "0x7d284aaac6e925aad802a53c0c69efe3764597b8" as Address;
-const RNS_BULK_MANAGER = "0x1ed36feb312b9d464d95fc1bab4b286ddc793341" as Address;
+const RNS_BULK_MANAGER = "0xdbb6bcea1e9a701ac2692550a0ae0d18bb48e899" as Address;
 
 interface Domain {
   id: string;
@@ -40,8 +40,10 @@ export function useUserDomains() {
     try {
       // Query our BulkRegistration events to get registered domains
       const currentBlock = await publicClient.getBlockNumber();
-      // RPC limits to 2000 blocks
-      const fromBlock = currentBlock > BigInt(2000) ? currentBlock - BigInt(2000) : BigInt(0);
+      // RPC limits to 2000 blocks - ensure we don't exceed this
+      const maxBlockRange = BigInt(2000);
+      const fromBlock = currentBlock > maxBlockRange ? currentBlock - maxBlockRange : BigInt(0);
+      const toBlock = currentBlock; // Use current block instead of "latest" to avoid range issues
 
       // Query BulkRegistration events from our contract
       // Note: This requires an RPC endpoint that supports eth_getLogs
@@ -63,7 +65,7 @@ export function useUserDomains() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any,
         fromBlock,
-        toBlock: "latest",
+        toBlock, // Use explicit block number instead of "latest"
       });
 
       console.log("Found BulkRegistration events:", bulkRegistrationLogs.length);

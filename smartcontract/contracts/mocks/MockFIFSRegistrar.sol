@@ -29,12 +29,13 @@ contract MockFIFSRegistrar is IFIFSRegistrar {
         return (basePrice * nameLength * duration) / 365 days;
     }
     
-    function register(string memory name, address nameOwner, bytes32 secret, uint256 duration, address addr) external override {
+    function register(string memory name, address nameOwner, bytes32 secret, uint256 duration) external override {
         require(!registered[name], "Domain already registered");
         uint256 priceToPay = this.price(name, 0, duration);
         require(token.transferFrom(msg.sender, address(this), priceToPay), "Payment failed");
         registered[name] = true;
-        // Note: addr parameter is for setting domain address, but mock doesn't implement that
+        // Note: Basic FIFS Registrar only has 4 parameters (VERIFIED via verification script)
+        // Function selector: 0x2bfcc031
     }
     
     // Commit-reveal functions (minimal implementation for testing)

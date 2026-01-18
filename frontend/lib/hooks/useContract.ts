@@ -1,6 +1,6 @@
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useWalletClient } from 'wagmi';
 import { RNS_BULK_MANAGER_ADDRESS, RNS_BULK_MANAGER_ABI } from '@/lib/abi';
-import { namehash, keccak256, toBytes } from 'viem';
+import { namehash, keccak256, toBytes, decodeEventLog } from 'viem';
 import { toast } from 'react-toastify';
 
 export function useRNSBulkManager() {
@@ -177,8 +177,38 @@ export function useRNSBulkManager() {
       
       // Wait for transaction receipt
       console.log('Waiting for transaction confirmation...');
-      await publicClient.waitForTransactionReceipt({ hash: txHash });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
       console.log('Transaction confirmed!');
+      
+      // Check for OperationFailed events to see if any registrations failed
+      const operationFailedLogs = receipt.logs.filter(log => {
+        try {
+          const decoded = decodeEventLog({
+            abi: RNS_BULK_MANAGER_ABI,
+            data: log.data,
+            topics: log.topics,
+          });
+          return decoded.eventName === 'OperationFailed';
+        } catch {
+          return false;
+        }
+      });
+      
+      if (operationFailedLogs.length > 0) {
+        console.warn('Some registrations failed:', operationFailedLogs);
+        for (const log of operationFailedLogs) {
+          try {
+            const decoded = decodeEventLog({
+              abi: RNS_BULK_MANAGER_ABI,
+              data: log.data,
+              topics: log.topics,
+            }) as { eventName: string; args: { index: bigint; reason: string } };
+            console.error(`Registration ${decoded.args.index} failed: ${decoded.args.reason}`);
+          } catch (e) {
+            console.error('Failed to decode OperationFailed event:', e);
+          }
+        }
+      }
       
     } catch (writeError: unknown) {
       // If writeContract fails, it might be because user rejected or there's an error

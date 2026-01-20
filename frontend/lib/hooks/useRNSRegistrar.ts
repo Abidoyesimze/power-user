@@ -2,11 +2,13 @@ import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
 import { keccak256, toBytes, bytesToHex } from 'viem';
 
 // RNS Contract addresses for testnet
-// CRITICAL: The ACTUALLY_FIXED contract uses Basic FIFS Registrar for registration,
-// so commits MUST go to the Basic FIFS Registrar (same one the contract uses)
+// CRITICAL: The ACTUALLY_FIXED contract uses FIFS Addr Registrar (0x9073...) for registration
+// via transferAndCall. The FIFS Addr Registrar checks commitments in ITS OWN storage,
+// NOT the Basic FIFS Registrar. So commits MUST go to FIFS Addr Registrar!
 // The two registrars have separate commitment storage - they MUST match!
-const FIFS_REGISTRAR_TESTNET = '0x36ffda909f941950a552011f2c50569fda14a169' as `0x${string}`; // Basic FIFS - used for commits and registration
-const FIFS_ADDR_REGISTRAR_TESTNET = '0x90734bd6bf96250a7b262e2bc34284b0d47c1e8d' as `0x${string}`; // FIFS Addr (NOT used in ACTUALLY_FIXED contract)
+const FIFS_REGISTRAR_TESTNET = '0x90734bd6bf96250a7b262e2bc34284b0d47c1e8d' as `0x${string}`; // FIFS Addr Registrar - used for commits AND registration
+// Note: The contract's bulkRegister uses FIFS Addr Registrar via transferAndCall,
+// which checks commitments in FIFS Addr Registrar's storage, not Basic FIFS!
 
 // FIFS Registrar ABI (minimal - only functions we need)
 const FIFS_REGISTRAR_ABI = [

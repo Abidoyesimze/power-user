@@ -6,7 +6,8 @@ import { keccak256, toBytes, bytesToHex } from 'viem';
 // so commits MUST go to the Basic FIFS Registrar (same one the contract uses)
 // The two registrars have separate commitment storage - they MUST match!
 const FIFS_REGISTRAR_TESTNET = '0x36ffda909f941950a552011f2c50569fda14a169' as `0x${string}`; // Basic FIFS - used for commits and registration
-const FIFS_ADDR_REGISTRAR_TESTNET = '0x90734bd6bf96250a7b262e2bc34284b0d47c1e8d' as `0x${string}`; // FIFS Addr (NOT used in ACTUALLY_FIXED contract)
+// Note: FIFS_ADDR_REGISTRAR_TESTNET is used by the contract internally via transferAndCall
+// Frontend commits to Basic FIFS Registrar (same one contract uses for commits)
 
 // FIFS Registrar ABI (minimal - only functions we need)
 const FIFS_REGISTRAR_ABI = [

@@ -195,19 +195,27 @@ export function useRNSBulkManager() {
       });
       
       if (operationFailedLogs.length > 0) {
-        console.warn('Some registrations failed:', operationFailedLogs);
+        console.warn('⚠️ Some registrations failed:', operationFailedLogs.length);
         for (const log of operationFailedLogs) {
           try {
             const decoded = decodeEventLog({
               abi: RNS_BULK_MANAGER_ABI,
               data: log.data,
               topics: log.topics,
-            }) as { eventName: string; args: { index: bigint; reason: string } };
-            console.error(`Registration ${decoded.args.index} failed: ${decoded.args.reason}`);
+            });
+            
+            if (decoded.eventName === 'OperationFailed' && decoded.args) {
+              // Type-safe access to args
+              const args = decoded.args as unknown as { index: bigint; reason: string };
+              console.error(`❌ Registration ${args.index} failed: ${args.reason}`);
+              toast.error(`Registration failed: ${args.reason}`);
+            }
           } catch (e) {
             console.error('Failed to decode OperationFailed event:', e);
           }
         }
+      } else {
+        console.log('✅ All registrations succeeded (no OperationFailed events)');
       }
       
     } catch (writeError: unknown) {

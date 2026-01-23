@@ -43,6 +43,7 @@ export default function RegisterTab() {
   const [isCommitting, setIsCommitting] = useState(false);
   const [isWaitingForReveal, setIsWaitingForReveal] = useState(false);
   const [registrationStage, setRegistrationStage] = useState<'idle' | 'committing' | 'waiting' | 'ready' | 'registering'>('idle');
+  const [commitStartTime, setCommitStartTime] = useState<number | null>(null);
   
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const availabilityCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -169,16 +170,34 @@ export default function RegisterTab() {
    * Includes debouncing and multiple validation layers
    */
   const checkDomainAvailability = async (index: number, name: string) => {
+    // CRITICAL: Normalize to label-only (no .rsk suffix) for availability checks
+    // The registrar availability API expects only the label, not the full domain
     const normalizedName = name.toLowerCase().trim().replace(/\.rsk$/i, '');
     const normalizedNameWithRsk = `${normalizedName}.rsk`;
     
-    // Skip empty or very short names
+    // Validate label format (alphanumeric and hyphens only, 3-63 chars)
+    // This matches RNS label requirements
     if (!normalizedName || normalizedName.length < 3) {
       setDomains(prev => {
         const updated = [...prev];
         updated[index] = { ...updated[index], isAvailable: undefined, isChecking: false };
         return updated;
       });
+      return;
+    }
+    
+    // Additional format validation
+    if (!/^[a-z0-9-]{3,63}$/.test(normalizedName)) {
+      setDomains(prev => {
+        const updated = [...prev];
+        updated[index] = { 
+          ...updated[index], 
+          isAvailable: false, 
+          isChecking: false 
+        };
+        return updated;
+      });
+      toast.error(`${name} has invalid format. Use 3-63 alphanumeric characters or hyphens.`, { autoClose: 4000 });
       return;
     }
     
@@ -393,31 +412,49 @@ export default function RegisterTab() {
       setIsCommitting(false);
       setIsWaitingForReveal(true);
       setRegistrationStage('waiting');
+      setCommitStartTime(Date.now()); // Track when commits were made
       
       // IMPORTANT: Reset isProcessing after commit completes
       // User should be able to wait or cancel at this point
       setIsProcessing(false);
       
-      // Start countdown from 60 seconds
-      setCountdown(60);
+      // Start polling canReveal() instead of hardcoded 60-second wait
+      // This ensures we wait for the actual minCommitmentAge, not a fixed time
+      setCountdown(60); // Initial estimate
       toast.success(
-        `Step 1/2 Complete: ${successfulCommits.length} domain${successfulCommits.length > 1 ? 's' : ''} committed! Waiting 60 seconds...`,
+        `Step 1/2 Complete: ${successfulCommits.length} domain${successfulCommits.length > 1 ? 's' : ''} committed! Waiting for commitment maturity...`,
         { autoClose: 5000 }
       );
 
-      // Start countdown timer
-      countdownIntervalRef.current = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev === null || prev <= 1) {
+      // Poll canReveal() for each commitment instead of hardcoded countdown
+      const checkCommitmentsReady = async () => {
+        try {
+          const allReady = await Promise.all(
+            successfulCommits.map(commit => canReveal(commit.commitmentHash))
+          );
+          
+          if (allReady.every(ready => ready)) {
+            // All commitments are ready
             if (countdownIntervalRef.current) {
               clearInterval(countdownIntervalRef.current);
             }
+            setCountdown(0);
             setRegistrationStage('ready');
-            return 0;
+            toast.success("All commitments are ready! You can now register.", { autoClose: 3000 });
+          } else {
+            // Still waiting - update countdown estimate based on elapsed time
+            const elapsed = commitStartTime ? (Date.now() - commitStartTime) / 1000 : 0;
+            const remaining = Math.max(0, 60 - elapsed);
+            setCountdown(Math.ceil(remaining));
           }
-          return prev - 1;
-        });
-      }, 1000);
+        } catch (error) {
+          console.error('Error checking commitment readiness:', error);
+        }
+      };
+
+      // Check immediately, then every 2 seconds
+      checkCommitmentsReady();
+      countdownIntervalRef.current = setInterval(checkCommitmentsReady, 2000);
 
     } catch (error) {
       console.error("Commit failed:", error);
@@ -433,6 +470,7 @@ export default function RegisterTab() {
 
   /**
    * Proceed with registration after commit-reveal waiting period
+   * CRITICAL: Validates that all commitments are ready before attempting registration
    */
   const proceedWithRegistration = async () => {
     if (!isConnected || !address || commitResults.length === 0) {
@@ -440,11 +478,33 @@ export default function RegisterTab() {
     }
 
     try {
+      // CRITICAL FIX: Verify all commitments are ready before registering
+      // This prevents "Commitment too new" errors
+      toast.info("Verifying commitments are ready...");
+      
+      const commitmentChecks = await Promise.all(
+        commitResults.map(async (commitResult) => {
+          const ready = await canReveal(commitResult.commitmentHash);
+          return { commitResult, ready };
+        })
+      );
+
+      const notReady = commitmentChecks.filter(check => !check.ready);
+      if (notReady.length > 0) {
+        const notReadyNames = notReady.map(nr => nr.commitResult.domain).join(", ");
+        toast.error(
+          `The following domains are not ready yet: ${notReadyNames}. Please wait a bit longer.`,
+          { autoClose: 8000 }
+        );
+        return;
+      }
+
       setIsProcessing(true);
       setRegistrationStage('registering');
       toast.info("Step 2/2: Registering domains...");
 
       // Create registration requests using secrets from commit results
+      // CRITICAL: Ensure name is label-only (no .rsk suffix) and lowercase
       const requests = commitResults.map((commitResult) => {
         // Find matching domain
         const domain = domains.find(
@@ -456,8 +516,19 @@ export default function RegisterTab() {
           throw new Error(`No matching domain found for commit: ${commitResult.domain}`);
         }
 
+        // Normalize name: lowercase, strip .rsk, validate format
+        const normalizedName = commitResult.domain
+          .toLowerCase()
+          .trim()
+          .replace(/\.rsk$/i, '');
+        
+        // Validate label format (alphanumeric and hyphens only, 3-63 chars)
+        if (!/^[a-z0-9-]{3,63}$/.test(normalizedName)) {
+          throw new Error(`Invalid domain name format: ${normalizedName}. Must be 3-63 alphanumeric characters or hyphens.`);
+        }
+
         return {
-          name: commitResult.domain.replace(/\.rsk$/i, ''),
+          name: normalizedName, // Label-only, no .rsk suffix
           owner: address,
           secret: commitResult.secret,
           duration: BigInt(parseInt(domain.duration) * 365 * 24 * 60 * 60),

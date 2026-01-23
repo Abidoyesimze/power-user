@@ -196,6 +196,8 @@ export function useRNSBulkManager() {
       
       if (operationFailedLogs.length > 0) {
         console.warn('⚠️ Some registrations failed:', operationFailedLogs.length);
+        const failedReasons: string[] = [];
+        
         for (const log of operationFailedLogs) {
           try {
             const decoded = decodeEventLog({
@@ -207,12 +209,34 @@ export function useRNSBulkManager() {
             if (decoded.eventName === 'OperationFailed' && decoded.args) {
               // Type-safe access to args
               const args = decoded.args as unknown as { index: bigint; reason: string };
-              console.error(`❌ Registration ${args.index} failed: ${args.reason}`);
-              toast.error(`Registration failed: ${args.reason}`);
+              const index = Number(args.index);
+              const reason = args.reason;
+              
+              console.error(`❌ Registration ${index} failed: ${reason}`);
+              
+              // Categorize common errors for better user feedback
+              if (reason.includes('Commitment') || reason.includes('commitment')) {
+                failedReasons.push(`Domain ${index + 1}: Commitment not ready. Please commit first and wait 60+ seconds.`);
+              } else if (reason.includes('already registered') || reason.includes('unavailable')) {
+                failedReasons.push(`Domain ${index + 1}: Already registered or unavailable.`);
+              } else if (reason.includes('RIF token') || reason.includes('transfer')) {
+                failedReasons.push(`Domain ${index + 1}: Payment failed. Check RIF token balance.`);
+              } else {
+                failedReasons.push(`Domain ${index + 1}: ${reason}`);
+              }
             }
           } catch (e) {
             console.error('Failed to decode OperationFailed event:', e);
+            failedReasons.push('Unknown error occurred');
           }
+        }
+        
+        // Show detailed error messages
+        if (failedReasons.length > 0) {
+          toast.error(
+            `${failedReasons.length} registration(s) failed:\n${failedReasons.slice(0, 3).join('\n')}${failedReasons.length > 3 ? `\n...and ${failedReasons.length - 3} more` : ''}`,
+            { autoClose: 10000 }
+          );
         }
       } else {
         console.log('✅ All registrations succeeded (no OperationFailed events)');
@@ -331,6 +355,9 @@ export function useRNSBulkManager() {
    * CRITICAL: Check if a domain is available for registration
    * Uses contract's isDomainAvailable function (which checks both RNS Registry and RSKOwner)
    * Falls back to manual checking if contract call fails
+   * 
+   * IMPORTANT: For .rsk registrations, the registrar availability API expects only the label,
+   * without the .rsk suffix. This function normalizes the input accordingly.
    */
   const checkAvailability = async (name: string): Promise<boolean> => {
     if (!publicClient) {
@@ -338,17 +365,26 @@ export function useRNSBulkManager() {
     }
 
     try {
-      // Remove .rsk suffix if present (contract expects name without .rsk)
-      const domainName = name.toLowerCase().trim().replace(/\.rsk$/i, '');
+      // CRITICAL: Normalize input - label-only, lowercase, strip .rsk
+      // The registrar availability API expects only the label, not the full domain
+      let domainName = name.toLowerCase().trim().replace(/\.rsk$/i, '');
+      
+      // Validate label format (alphanumeric and hyphens only, 3-63 chars)
+      // This matches RNS label requirements
+      if (!/^[a-z0-9-]{3,63}$/.test(domainName)) {
+        console.warn(`Invalid label format: ${domainName}`);
+        return false;
+      }
       
       // PRIMARY: Use contract's isDomainAvailable function
       // This is more reliable as it matches the contract's logic exactly
+      // Contract expects label-only (without .rsk suffix)
       try {
         const available = await publicClient.readContract({
           address: RNS_BULK_MANAGER_ADDRESS,
           abi: RNS_BULK_MANAGER_ABI,
           functionName: 'isDomainAvailable',
-          args: [domainName],
+          args: [domainName], // Label-only, no .rsk suffix
         });
         
         return available as boolean;

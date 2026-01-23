@@ -112,8 +112,12 @@ contract RNSBulkManager {
     
     /**
      * @dev Check if a domain is available
+     * IMPORTANT: This function expects the label ONLY (without .rsk suffix)
+     * For example: "jonathan" not "jonathan.rsk"
+     * The registrar availability API expects only the label, not the full domain
      */
     function isDomainAvailable(string calldata name) public view returns (bool available) {
+        // Note: name should be label-only (e.g., "jonathan" not "jonathan.rsk")
         bytes32 label = keccak256(bytes(name));
         bytes32 node = keccak256(abi.encodePacked(RSK_NODE, label));
         
@@ -232,6 +236,9 @@ contract RNSBulkManager {
         uint256 totalCost = 0;
         
         // Pre-check availability and calculate cost
+        // NOTE: Using fixed price instead of registrar's price() because testnet registrar has a bug:
+        // It returns duration + 2 RIF (e.g., 31,536,002 RIF for 1 year) instead of reasonable prices
+        // See TESTNET_PRICE_WORKAROUND.md for details
         for (uint256 i = 0; i < requests.length; i++) {
             bool available = isDomainAvailable(requests[i].name);
             
@@ -263,6 +270,10 @@ contract RNSBulkManager {
             "RIF token transfer failed"
         );
         
+        // Verify we received the tokens
+        uint256 contractBalance = rifToken.balanceOf(address(this));
+        require(contractBalance >= totalCost, "Insufficient tokens received");
+        
         // Process registrations using transferAndCall (ERC-677 pattern)
         // Each registration pays individually via transferAndCall
         for (uint256 i = 0; i < requests.length; i++) {
@@ -270,11 +281,30 @@ contract RNSBulkManager {
                 continue;
             }
             
+            // Validate name length
+            // CRITICAL: FIFS Addr Registrar requires minimum 5 characters (verified via minLength() call)
+            // Standard RNS allows 3+, but this registrar has stricter requirements
+            bytes memory nameBytes = bytes(requests[i].name);
+            if (nameBytes.length < 5) {
+                results[i] = OperationResult(false, i, "Domain name too short (minimum 5 characters required by registrar)");
+                emit OperationFailed(i, "Short names not available");
+                continue;
+            }
+            
             // Calculate price for this registration
+            // NOTE: Using fixed price instead of registrar's price() because testnet registrar has a bug
+            // See TESTNET_PRICE_WORKAROUND.md for details
             uint256 durationInYears = (requests[i].duration * 100) / 31536000;
             uint256 cost = (PRICE_PER_YEAR * durationInYears) / 100;
             if (cost < 1 * 10**16) {
                 cost = 1 * 10**16;
+            }
+            
+            // Verify we have enough balance for this registration
+            if (rifToken.balanceOf(address(this)) < cost) {
+                results[i] = OperationResult(false, i, "Not enough tokens in contract");
+                emit OperationFailed(i, "Not enough tokens");
+                continue;
             }
             
             // Step 1: Register domain using FIFS Addr Registrar with transferAndCall (ERC-677 pattern)

@@ -2,7 +2,7 @@
 
 import { useAccount, usePublicClient } from "wagmi";
 import { useState, useEffect, useCallback } from "react";
-import { Address, namehash, decodeFunctionData } from "viem";
+import { Address, namehash, decodeFunctionData, decodeEventLog } from "viem";
 import { RNS_BULK_MANAGER_ABI } from "@/lib/abi";
 
 // Contract addresses on testnet
@@ -70,6 +70,50 @@ export function useUserDomains() {
 
       console.log("Found BulkRegistration events:", bulkRegistrationLogs.length);
 
+      // CRITICAL: First, check for OperationFailed events to identify failed registrations
+      // This prevents showing failed registrations as successful
+      const operationFailedLogs = await publicClient.getLogs({
+        address: RNS_BULK_MANAGER,
+        event: {
+          type: "event",
+          name: "OperationFailed",
+          inputs: [
+            { name: "index", type: "uint256", indexed: true },
+            { name: "reason", type: "string", indexed: false },
+          ],
+        } as any,
+        fromBlock,
+        toBlock,
+      });
+
+      // Map of transaction hash -> set of failed indices
+      const failedRegistrations = new Map<string, Set<number>>();
+      
+      for (const log of operationFailedLogs) {
+        try {
+          const decoded = decodeEventLog({
+            abi: RNS_BULK_MANAGER_ABI,
+            data: log.data,
+            topics: log.topics,
+          });
+          
+          if (decoded.eventName === "OperationFailed" && decoded.args) {
+            const args = decoded.args as unknown as { index: bigint; reason: string };
+            const txHash = log.transactionHash;
+            const index = Number(args.index);
+            
+            if (!failedRegistrations.has(txHash)) {
+              failedRegistrations.set(txHash, new Set());
+            }
+            failedRegistrations.get(txHash)!.add(index);
+            
+            console.log(`❌ Registration ${index} failed in tx ${txHash}: ${args.reason}`);
+          }
+        } catch (err) {
+          console.error("Error decoding OperationFailed event:", err);
+        }
+      }
+
       // For each event, fetch the transaction to decode domain names
       const uniqueDomains = new Map<string, Domain>();
       
@@ -79,6 +123,9 @@ export function useUserDomains() {
           const tx = await publicClient.getTransaction({ hash: log.transactionHash });
           
           console.log("Processing transaction:", log.transactionHash);
+          
+          // Check if this transaction had any failed registrations
+          const failedIndices = failedRegistrations.get(log.transactionHash) || new Set<number>();
           
           // Decode the function call using viem's decodeFunctionData
           const decoded = decodeFunctionData({
@@ -98,7 +145,14 @@ export function useUserDomains() {
               continue;
             }
             
-            for (const request of requests) {
+            for (let i = 0; i < requests.length; i++) {
+              // Skip if this registration failed
+              if (failedIndices.has(i)) {
+                console.log(`⏭️ Skipping failed registration ${i}`);
+                continue;
+              }
+              
+              const request = requests[i];
               const domainName = request.name as string;
               const duration = request.duration as bigint; // Duration in seconds
               console.log("Processing domain:", domainName);
@@ -113,7 +167,7 @@ export function useUserDomains() {
               const nodeStr = node;
               
               if (!uniqueDomains.has(nodeStr)) {
-                // Verify ownership
+                // Verify ownership - CRITICAL: Only add if actually registered
                 try {
                   console.log("Checking ownership for node:", node);
                   
@@ -146,14 +200,14 @@ export function useUserDomains() {
                   console.log("Owner from registry:", owner);
                   console.log("User address:", address);
                   
-                  // Check if domain is owned by user OR if it's zero address (not yet registered in registry)
-                  // Since we're tracking registrations through our BulkManager, we trust our events
-                  if (owner.toLowerCase() === address.toLowerCase() || owner === "0x0000000000000000000000000000000000000000") {
+                  // CRITICAL FIX: Only add domain if owner is actually set (not zero address) AND matches user
+                  // Zero address means registration failed, even if no OperationFailed event was caught
+                  if (owner.toLowerCase() === address.toLowerCase() && owner !== "0x0000000000000000000000000000000000000000") {
                     console.log("✅ Domain registered through BulkManager:", normalizedName);
                     uniqueDomains.set(nodeStr, {
                       id: nodeStr,
                       name: normalizedName,
-                      owner: owner !== "0x0000000000000000000000000000000000000000" ? owner as string : address,
+                      owner: owner as string,
                       expiry: expiryDate,
                       resolver: "0x0000000000000000000000000000000000000000",
                       address: "0x0000000000000000000000000000000000000000",
@@ -162,7 +216,7 @@ export function useUserDomains() {
                       daysUntilExpiry,
                     });
                   } else {
-                    console.log("❌ Domain not owned by user:", normalizedName, "owner:", owner);
+                    console.log("❌ Domain not registered (owner is zero or different):", normalizedName, "owner:", owner);
                   }
                 } catch (err) {
                   console.error(`Error checking ownership for ${normalizedName}:`, err);

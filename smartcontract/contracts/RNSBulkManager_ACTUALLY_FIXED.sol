@@ -267,10 +267,22 @@ contract RNSBulkManager {
             "RIF token transfer failed"
         );
         
+        // Verify we received the tokens
+        uint256 contractBalance = rifToken.balanceOf(address(this));
+        require(contractBalance >= totalCost, "Insufficient tokens received");
+        
         // Process registrations using transferAndCall (ERC-677 pattern)
         // Each registration pays individually via transferAndCall
         for (uint256 i = 0; i < requests.length; i++) {
             if (!results[i].success && bytes(results[i].errorMessage).length > 0) {
+                continue;
+            }
+            
+            // Validate name length (RNS requires minimum 3 characters, but some registrars may require more)
+            bytes memory nameBytes = bytes(requests[i].name);
+            if (nameBytes.length < 3) {
+                results[i] = OperationResult(false, i, "Domain name too short (minimum 3 characters)");
+                emit OperationFailed(i, "Domain name too short");
                 continue;
             }
             
@@ -279,6 +291,13 @@ contract RNSBulkManager {
             uint256 cost = (PRICE_PER_YEAR * durationInYears) / 100;
             if (cost < 1 * 10**16) {
                 cost = 1 * 10**16;
+            }
+            
+            // Verify we have enough balance for this registration
+            if (rifToken.balanceOf(address(this)) < cost) {
+                results[i] = OperationResult(false, i, "Not enough tokens in contract");
+                emit OperationFailed(i, "Not enough tokens");
+                continue;
             }
             
             // Step 1: Register domain using FIFS Addr Registrar with transferAndCall (ERC-677 pattern)

@@ -236,6 +236,9 @@ contract RNSBulkManager {
         uint256 totalCost = 0;
         
         // Pre-check availability and calculate cost
+        // NOTE: Using fixed price instead of registrar's price() because testnet registrar has a bug:
+        // It returns duration + 2 RIF (e.g., 31,536,002 RIF for 1 year) instead of reasonable prices
+        // See TESTNET_PRICE_WORKAROUND.md for details
         for (uint256 i = 0; i < requests.length; i++) {
             bool available = isDomainAvailable(requests[i].name);
             
@@ -289,6 +292,8 @@ contract RNSBulkManager {
             }
             
             // Calculate price for this registration
+            // NOTE: Using fixed price instead of registrar's price() because testnet registrar has a bug
+            // See TESTNET_PRICE_WORKAROUND.md for details
             uint256 durationInYears = (requests[i].duration * 100) / 31536000;
             uint256 cost = (PRICE_PER_YEAR * durationInYears) / 100;
             if (cost < 1 * 10**16) {

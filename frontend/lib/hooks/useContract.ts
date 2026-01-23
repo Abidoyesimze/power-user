@@ -369,10 +369,11 @@ export function useRNSBulkManager() {
       // The registrar availability API expects only the label, not the full domain
       let domainName = name.toLowerCase().trim().replace(/\.rsk$/i, '');
       
-      // Validate label format (alphanumeric and hyphens only, 3-63 chars)
-      // This matches RNS label requirements
-      if (!/^[a-z0-9-]{3,63}$/.test(domainName)) {
-        console.warn(`Invalid label format: ${domainName}`);
+      // Validate label format (alphanumeric and hyphens only, 5-63 chars)
+      // CRITICAL: FIFS Addr Registrar requires minimum 5 characters (verified via minLength() call)
+      // Standard RNS allows 3+, but this registrar has stricter requirements
+      if (!/^[a-z0-9-]{5,63}$/.test(domainName)) {
+        console.warn(`Invalid label format or too short: ${domainName} (minimum 5 characters required)`);
         return false;
       }
       

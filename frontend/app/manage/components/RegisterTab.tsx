@@ -175,19 +175,10 @@ export default function RegisterTab() {
     const normalizedName = name.toLowerCase().trim().replace(/\.rsk$/i, '');
     const normalizedNameWithRsk = `${normalizedName}.rsk`;
     
-    // Validate label format (alphanumeric and hyphens only, 3-63 chars)
-    // This matches RNS label requirements
-    if (!normalizedName || normalizedName.length < 3) {
-      setDomains(prev => {
-        const updated = [...prev];
-        updated[index] = { ...updated[index], isAvailable: undefined, isChecking: false };
-        return updated;
-      });
-      return;
-    }
-    
-    // Additional format validation
-    if (!/^[a-z0-9-]{3,63}$/.test(normalizedName)) {
+    // Validate label format
+    // CRITICAL: FIFS Addr Registrar requires minimum 5 characters (verified via minLength() call)
+    // Standard RNS allows 3+, but this registrar has stricter requirements
+    if (!normalizedName || normalizedName.length < 5) {
       setDomains(prev => {
         const updated = [...prev];
         updated[index] = { 
@@ -197,7 +188,24 @@ export default function RegisterTab() {
         };
         return updated;
       });
-      toast.error(`${name} has invalid format. Use 3-63 alphanumeric characters or hyphens.`, { autoClose: 4000 });
+      if (normalizedName && normalizedName.length > 0) {
+        toast.error(`${name} is too short. Minimum 5 characters required by the registrar.`, { autoClose: 5000 });
+      }
+      return;
+    }
+    
+    // Additional format validation (5-63 chars to match registrar requirement)
+    if (!/^[a-z0-9-]{5,63}$/.test(normalizedName)) {
+      setDomains(prev => {
+        const updated = [...prev];
+        updated[index] = { 
+          ...updated[index], 
+          isAvailable: false, 
+          isChecking: false 
+        };
+        return updated;
+      });
+      toast.error(`${name} has invalid format. Use 5-63 alphanumeric characters or hyphens.`, { autoClose: 4000 });
       return;
     }
     
@@ -522,9 +530,10 @@ export default function RegisterTab() {
           .trim()
           .replace(/\.rsk$/i, '');
         
-        // Validate label format (alphanumeric and hyphens only, 3-63 chars)
-        if (!/^[a-z0-9-]{3,63}$/.test(normalizedName)) {
-          throw new Error(`Invalid domain name format: ${normalizedName}. Must be 3-63 alphanumeric characters or hyphens.`);
+        // Validate label format (alphanumeric and hyphens only, 5-63 chars)
+        // CRITICAL: FIFS Addr Registrar requires minimum 5 characters (verified via minLength() call)
+        if (!/^[a-z0-9-]{5,63}$/.test(normalizedName)) {
+          throw new Error(`Invalid domain name format: ${normalizedName}. Must be 5-63 alphanumeric characters or hyphens (minimum 5 required by registrar).`);
         }
 
         return {

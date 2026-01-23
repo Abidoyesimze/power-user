@@ -278,11 +278,13 @@ contract RNSBulkManager {
                 continue;
             }
             
-            // Validate name length (RNS requires minimum 3 characters, but some registrars may require more)
+            // Validate name length
+            // CRITICAL: FIFS Addr Registrar requires minimum 5 characters (verified via minLength() call)
+            // Standard RNS allows 3+, but this registrar has stricter requirements
             bytes memory nameBytes = bytes(requests[i].name);
-            if (nameBytes.length < 3) {
-                results[i] = OperationResult(false, i, "Domain name too short (minimum 3 characters)");
-                emit OperationFailed(i, "Domain name too short");
+            if (nameBytes.length < 5) {
+                results[i] = OperationResult(false, i, "Domain name too short (minimum 5 characters required by registrar)");
+                emit OperationFailed(i, "Short names not available");
                 continue;
             }
             

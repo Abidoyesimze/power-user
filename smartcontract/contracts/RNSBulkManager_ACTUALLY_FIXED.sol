@@ -112,8 +112,12 @@ contract RNSBulkManager {
     
     /**
      * @dev Check if a domain is available
+     * IMPORTANT: This function expects the label ONLY (without .rsk suffix)
+     * For example: "jonathan" not "jonathan.rsk"
+     * The registrar availability API expects only the label, not the full domain
      */
     function isDomainAvailable(string calldata name) public view returns (bool available) {
+        // Note: name should be label-only (e.g., "jonathan" not "jonathan.rsk")
         bytes32 label = keccak256(bytes(name));
         bytes32 node = keccak256(abi.encodePacked(RSK_NODE, label));
         
